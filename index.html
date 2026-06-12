@@ -766,9 +766,72 @@ function Modal({children,onClose}){
   </div>;
 }
 
+function AuthScreen({store,setStore,onAuth}){
+  const [mode,setMode]=useState("login");
+  const [lf,setLf]=useState({email:"",password:""});
+  const [sf,setSf]=useState({name:"",email:"",password:"",grade:"Member",color:AVATAR_COLORS[2],photo:null});
+  const [err,setErr]=useState("");
+  const users = store.members||[];
+  function doLogin(){
+    const u=users.find(m=>m.email && m.email.toLowerCase()===lf.email.trim().toLowerCase() && m.password===lf.password);
+    if(!u){ setErr("이메일 또는 비밀번호가 올바르지 않습니다."); return; }
+    onAuth(u.id);
+  }
+  function doSignup(){
+    if(!sf.name.trim()||!sf.email.trim()||!sf.password){ setErr("이름·이메일·비밀번호를 모두 입력하세요."); return; }
+    if(users.some(m=>m.email && m.email.toLowerCase()===sf.email.trim().toLowerCase())){ setErr("이미 가입된 이메일입니다."); return; }
+    const id="u"+Date.now();
+    const nu={ id, name:sf.name.trim(), email:sf.email.trim(), password:sf.password, grade:sf.grade, color:sf.color, photo:sf.photo, avatar:sf.name.trim()[0] };
+    setStore(s=>{const ns=structuredClone(s); ns.members=ns.members||[]; ns.members.push(nu); return ns;});
+    onAuth(id);
+  }
+  return <div className="h-full w-full flex items-center justify-center bg-sidebar p-4">
+    <div className="w-full max-w-sm">
+      <div className="flex items-center gap-2.5 justify-center mb-6">
+        <div className="w-9 h-9 rounded-lg grid place-items-center font-bold text-white text-base" style={{background:"#37352f"}}>S</div>
+        <div><div className="font-bold text-[18px] leading-none text-ntext">sia.haus</div><div className="text-[11px] text-nfaint mt-1">Communication OS</div></div>
+      </div>
+      <div className="bg-page border border-line rounded-xl nshadow p-6">
+        <div className="flex gap-1 mb-5 bg-sidebar rounded-lg p-1">
+          <button onClick={()=>{setMode("login");setErr("");}} className={"flex-1 py-1.5 rounded-md text-[13px] font-medium transition "+(mode==="login"?"bg-page text-ntext nshadow":"text-nsub")}>로그인</button>
+          <button onClick={()=>{setMode("signup");setErr("");}} className={"flex-1 py-1.5 rounded-md text-[13px] font-medium transition "+(mode==="signup"?"bg-page text-ntext nshadow":"text-nsub")}>회원가입</button>
+        </div>
+        {mode==="login" ? <div className="space-y-3">
+          <Field label="이메일"><input className="inp" value={lf.email} onChange={e=>setLf({...lf,email:e.target.value})} onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="ceo@sia.haus"/></Field>
+          <Field label="비밀번호"><input type="password" className="inp" value={lf.password} onChange={e=>setLf({...lf,password:e.target.value})} onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="••••••"/></Field>
+          {err && <div className="text-[12px] text-[#a32d2d]">{err}</div>}
+          <button onClick={doLogin} className="w-full btn-dark py-2 rounded-md text-sm font-medium">로그인</button>
+          <div className="text-[11px] text-nfaint text-center pt-1">데모 계정 — ceo@sia.haus / sia1234</div>
+        </div> : <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <label className="cursor-pointer relative group">
+              {sf.photo
+                ? <img src={sf.photo} className="w-14 h-14 rounded-full object-cover" alt="프로필"/>
+                : <div className="w-14 h-14 rounded-full grid place-items-center text-white font-semibold" style={{background:sf.color,fontSize:20}}>{sf.name.trim()[0]||"?"}</div>}
+              <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 grid place-items-center text-white text-[10px] transition">사진</div>
+              <input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files[0]; if(f) readImageFile(f,(d)=>setSf(s=>({...s,photo:d})));}}/>
+            </label>
+            <div className="text-[12px] text-nsub">프로필 사진<br/>클릭해서 업로드 (선택)</div>
+          </div>
+          <Field label="이름"><input className="inp" value={sf.name} onChange={e=>setSf({...sf,name:e.target.value})} placeholder="예: 황유근"/></Field>
+          <Field label="이메일"><input className="inp" value={sf.email} onChange={e=>setSf({...sf,email:e.target.value})} placeholder="you@sia.haus"/></Field>
+          <Field label="비밀번호"><input type="password" className="inp" value={sf.password} onChange={e=>setSf({...sf,password:e.target.value})} placeholder="••••••"/></Field>
+          <Field label="권한 등급 (가입 시 부여)"><select className="inp" value={sf.grade} onChange={e=>setSf({...sf,grade:e.target.value})}>{GRADES.map(g=><option key={g}>{g}</option>)}</select></Field>
+          {!sf.photo && <Field label="기본 아바타 색상"><div className="flex flex-wrap gap-2 pt-1">{AVATAR_COLORS.map(c=><button key={c} onClick={()=>setSf({...sf,color:c})} className={"w-6 h-6 rounded-full "+(sf.color===c?"ring-2 ring-offset-2 ring-[#9b9a97]":"")} style={{background:c}} aria-label="색상"/>)}</div></Field>}
+          {err && <div className="text-[12px] text-[#a32d2d]">{err}</div>}
+          <button onClick={doSignup} className="w-full btn-dark py-2 rounded-md text-sm font-medium">가입하고 시작하기</button>
+        </div>}
+      </div>
+    </div>
+  </div>;
+}
+
 function App(){
   const [store,setStore]=useState(loadStore);
+  const [authId,setAuthId]=useState(()=>{ try{ return localStorage.getItem(AUTH_KEY); }catch(e){ return null; } });
   if(store.members && store.members.length) MEMBERS = store.members;
+  const currentUser = (store.members||[]).find(m=>m.id===authId);
+  if(currentUser) ME = currentUser;
   const [view,setView]=useState("dashboard");
   const [menu,setMenu]=useState(false);
   const [cur,setCur]=useState(store.channels[0].id);
@@ -778,6 +841,8 @@ function App(){
   const [kFocus,setKFocus]=useState(null);
   const nonce=useRef(0);
   useEffect(()=>saveStore(store),[store]);
+  function login(id){ try{ localStorage.setItem(AUTH_KEY,id); }catch(e){} setAuthId(id); }
+  function logout(){ try{ localStorage.removeItem(AUTH_KEY); }catch(e){} setAuthId(null); }
   function reset(){ if(confirm("데모 데이터를 초기 상태로 되돌릴까요?")){localStorage.removeItem(STORE_KEY);setStore(structuredClone(SEED));setCur(SEED.channels[0].id);setProj(null);} }
 
   const chGroups = useMemo(()=>{
