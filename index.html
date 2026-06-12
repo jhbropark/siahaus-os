@@ -54,18 +54,19 @@
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useMemo, useRef } = React;
 
-const STORE_KEY = "siahaus_os_v5";
+const STORE_KEY = "siahaus_os_v6";
 
 const SEED_MEMBERS = [
-  { id:"ceo",  name:"박준혁", role:"CEO", grade:"CEO", avatar:"준", color:"#eb5757" },
-  { id:"cd",   name:"문은준", role:"Creative Director", grade:"Creative Director", avatar:"은", color:"#9a6dd7" },
-  { id:"a3d",  name:"김서아", role:"3D Artist", grade:"Member", avatar:"서", color:"#2383e2" },
-  { id:"ta",   name:"이도윤", role:"Technical Artist", grade:"Lead", avatar:"도", color:"#0f9960" },
-  { id:"vd",   name:"정하린", role:"Visual Designer", grade:"Member", avatar:"하", color:"#d9730d" },
-  { id:"col",  name:"홍인숙", role:"Collaborator (외부)", grade:"Collaborator", avatar:"홍", color:"#9b9a97" },
+  { id:"ceo",  name:"박준혁", email:"ceo@sia.haus",   password:"sia1234", grade:"CEO", avatar:"준", color:"#eb5757", photo:null },
+  { id:"cd",   name:"문은준", email:"cd@sia.haus",    password:"sia1234", grade:"Creative Director", avatar:"은", color:"#9a6dd7", photo:null },
+  { id:"a3d",  name:"김서아", email:"sua@sia.haus",   password:"sia1234", grade:"Member", avatar:"서", color:"#2383e2", photo:null },
+  { id:"ta",   name:"이도윤", email:"doyun@sia.haus", password:"sia1234", grade:"Lead", avatar:"도", color:"#0f9960", photo:null },
+  { id:"vd",   name:"정하린", email:"harin@sia.haus", password:"sia1234", grade:"Member", avatar:"하", color:"#d9730d", photo:null },
+  { id:"col",  name:"홍인숙", email:"insuk@ext.com",  password:"sia1234", grade:"Collaborator", avatar:"홍", color:"#9b9a97", photo:null },
 ];
 let MEMBERS = SEED_MEMBERS.map(m=>({...m}));
-const ME = { id:"ceo", name:"박준혁", role:"CEO", grade:"CEO", avatar:"준", color:"#eb5757" };
+let ME = { ...SEED_MEMBERS[0] };
+const AUTH_KEY = "siahaus_os_auth";
 const AVATAR_COLORS = ["#eb5757","#9a6dd7","#2383e2","#0f9960","#d9730d","#0b7285","#c2255c","#5c4b00","#37352f","#9b9a97"];
 const GRADES = ["CEO","Creative Director","Lead","Member","Collaborator"];
 const GRADE_PERMS = {
@@ -162,8 +163,18 @@ const PRIORITY = {
 
 function Avatar({id,size=24}){
   const m = member(id);
+  if(m.photo) return <img src={m.photo} alt={m.name} title={m.name} className="rounded-full object-cover shrink-0" style={{width:size,height:size}}/>;
   return <div className="rounded-full grid place-items-center font-semibold text-white shrink-0"
-    style={{width:size,height:size,background:m.color,fontSize:size*0.42}} title={m.name}>{m.avatar}</div>;
+    style={{width:size,height:size,background:m.color,fontSize:size*0.42}} title={m.name}>{m.avatar||(m.name||"?")[0]}</div>;
+}
+function readImageFile(file, cb){
+  const r=new FileReader();
+  r.onload=()=>{ const img=new Image(); img.onload=()=>{
+    const s=160, c=document.createElement("canvas"); c.width=s; c.height=s; const x=c.getContext("2d");
+    const m=Math.min(img.width,img.height), sx=(img.width-m)/2, sy=(img.height-m)/2;
+    x.drawImage(img,sx,sy,m,m,0,0,s,s); cb(c.toDataURL("image/jpeg",0.85));
+  }; img.src=r.result; };
+  r.readAsDataURL(file);
 }
 function Tag({children,bg,fg,dot}){
   return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[12px] font-medium leading-none"
