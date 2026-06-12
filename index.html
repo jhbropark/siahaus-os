@@ -225,7 +225,7 @@ function Dashboard({store, go}){
     {label:"진행 중 프로젝트",val:active.length,sub:"진행 · 리뷰 · 킥오프",dot:"#0f9960",act:()=>go("projects")},
     {label:"10일 내 마감",val:dueSoon.length,sub:"임박 마일스톤",dot:"#e03e3e",act:()=>go("projects")},
     {label:"전체 메시지",val:msgCount,sub:store.channels.length+"개 채널",dot:"#2383e2",act:()=>go("channels")},
-    {label:"활성 멤버",val:MEMBERS.length-1,sub:"+ 외부 협업 1",dot:"#d9730d",act:()=>go("members")},
+    {label:"활성 멤버",val:MEMBERS.length,sub:"전체 구성원",dot:"#d9730d",act:()=>go("members")},
   ];
   return <Section title="대시보드" desc="오늘의 sia.haus 한눈에 보기">
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
@@ -671,37 +671,34 @@ function Knowledge({store,focus}){
 
 function MemberForm({init,onClose,onSave,onDelete}){
   const editing = !!init;
-  const [f,setF]=useState(init ? {...init} : {name:"",role:"",grade:"Member",avatar:"",color:AVATAR_COLORS[2]});
-  const initial = (f.avatar&&f.avatar.trim()) ? f.avatar.trim()[0] : (f.name.trim()[0]||"?");
-  const gp = GRADE_PERMS[f.grade]||GRADE_PERMS.Member;
+  const [f,setF]=useState(init ? {...init} : {name:"",grade:"Member",color:AVATAR_COLORS[2],photo:null});
+  const initial = (f.name.trim()[0]||"?");
   return <Modal onClose={onClose}>
     <div className="flex items-center justify-between mb-4">
-      <h2 className="text-lg font-bold text-ntext">{editing?"멤버 수정":"멤버 추가"}</h2>
+      <h2 className="text-lg font-bold text-ntext">{editing?"프로필 수정":"멤버 추가"}</h2>
       {editing && init.id!==ME.id && <button onClick={onDelete} className="text-[12px] text-[#a32d2d] hover:underline">삭제</button>}
     </div>
-    <div className="flex items-center gap-3 mb-4">
-      <div className="rounded-full grid place-items-center font-semibold text-white shrink-0" style={{width:48,height:48,background:f.color,fontSize:20}}>{initial}</div>
-      <div className="text-[12px] text-nsub">아바타는 아래 글자·색상으로 표시됩니다</div>
+    <div className="flex items-center gap-4 mb-4">
+      <label className="cursor-pointer relative group shrink-0">
+        {f.photo
+          ? <img src={f.photo} className="w-16 h-16 rounded-full object-cover" alt="프로필"/>
+          : <div className="w-16 h-16 rounded-full grid place-items-center text-white font-semibold" style={{background:f.color,fontSize:24}}>{initial}</div>}
+        <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 grid place-items-center text-white text-[11px] transition">변경</div>
+        <input type="file" accept="image/*" className="hidden" onChange={e=>{const file=e.target.files[0]; if(file) readImageFile(file,(d)=>setF(s=>({...s,photo:d})));}}/>
+      </label>
+      <div className="text-[12px] text-nsub">프로필 사진<br/>클릭해서 업로드
+        {f.photo && <div><button onClick={()=>setF({...f,photo:null})} className="mt-1 text-[11px] text-nfaint hover:text-ntext underline">사진 제거</button></div>}
+      </div>
     </div>
     <div className="space-y-3">
       <Field label="이름"><input className="inp" value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="예: 박서준"/></Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="역할(직책)"><input className="inp" value={f.role} onChange={e=>setF({...f,role:e.target.value})} placeholder="예: 3D Artist"/></Field>
-        <Field label="아바타 글자"><input className="inp" maxLength={1} value={f.avatar} onChange={e=>setF({...f,avatar:e.target.value})} placeholder={f.name.trim()[0]||"?"}/></Field>
-      </div>
-      <Field label="권한 등급 (채널 권한)"><select className="inp" value={f.grade} onChange={e=>setF({...f,grade:e.target.value})}>{GRADES.map(g=><option key={g}>{g}</option>)}</select></Field>
-      <div className="text-[12px] bg-sidebar border border-line rounded-md p-2.5">
-        <div className="flex justify-between py-0.5"><span className="text-nfaint">채널</span><span className="text-ntext">{gp.ch}</span></div>
-        <div className="flex justify-between py-0.5"><span className="text-nfaint">프로젝트</span><span className="text-ntext">{gp.proj}</span></div>
-        <div className="flex justify-between py-0.5"><span className="text-nfaint">외부 접근</span><span className="text-ntext">{gp.ext}</span></div>
-      </div>
-      <Field label="아바타 색상"><div className="flex flex-wrap gap-2 pt-1">
+      {!f.photo && <Field label="기본 아바타 색상"><div className="flex flex-wrap gap-2 pt-1">
         {AVATAR_COLORS.map(c=><button key={c} onClick={()=>setF({...f,color:c})} className={"w-7 h-7 rounded-full transition "+(f.color===c?"ring-2 ring-offset-2 ring-[#9b9a97]":"")} style={{background:c}} aria-label="색상"/>)}
-      </div></Field>
+      </div></Field>}
     </div>
     <div className="flex justify-end gap-2 mt-5">
       <button onClick={onClose} className="text-sm px-3 py-1.5 rounded-md border border-line hov text-nsub">취소</button>
-      <button disabled={!f.name.trim()} onClick={()=>onSave({...f,name:f.name.trim(),role:(f.role||"").trim()||f.grade,avatar:((f.avatar||"").trim()||f.name.trim()[0]||"?"),color:f.color,grade:f.grade})} className="text-sm px-3 py-1.5 rounded-md btn-dark disabled:opacity-40">{editing?"저장":"추가"}</button>
+      <button disabled={!f.name.trim()} onClick={()=>onSave({...f,name:f.name.trim(),avatar:f.name.trim()[0]})} className="text-sm px-3 py-1.5 rounded-md btn-dark disabled:opacity-40">{editing?"저장":"추가"}</button>
     </div>
   </Modal>;
 }
@@ -718,7 +715,7 @@ function Members({store,setStore}){
   }
   function removeMember(id){ const nm=member(id).name; if(!confirm(`${nm} 님을 멤버에서 삭제할까요?`)) return; setStore(s=>({...structuredClone(s), members:(s.members||[]).filter(x=>x.id!==id)})); setEditing(null); }
   const editMember = (editing && editing!=="new") ? list.find(m=>m.id===editing) : null;
-  return <Section title="멤버 · 역할" desc="조직 구성과 권한 등급 · 카드를 눌러 수정"
+  return <Section title="멤버 · 프로필" desc="조직 구성과 권한 등급 · 카드를 눌러 프로필 수정"
     right={<button onClick={()=>setEditing("new")} className="text-[13px] btn-dark font-medium px-3 py-1.5 rounded-md">+ 멤버 추가</button>}>
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {list.map(m=>{
@@ -727,7 +724,7 @@ function Members({store,setStore}){
           <Avatar id={m.id} size={42}/>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5"><span className="font-semibold text-ntext truncate">{m.name}</span>{m.id===ME.id && <span className="text-[10px] text-nfaint px-1 py-0.5 rounded bg-sidebar shrink-0">나</span>}</div>
-            <div className="text-[12px] text-nsub truncate">{m.role}</div>
+            <div className="text-[12px] text-nsub truncate">{m.email||""}</div>
             <div className="mt-1.5"><Tag bg={g.bg} fg={g.fg}>{memGrade(m)}</Tag></div>
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
@@ -914,14 +911,17 @@ function App(){
 
       </nav>
       <div className="p-2 border-t border-line">
-        <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hov">
+        <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-md">
           <Avatar id={ME.id} size={30}/>
-          <div className="min-w-0 flex-1"><div className="text-[14px] font-medium truncate text-ntext">{ME.name}</div><div className="text-[11px] text-nfaint">{ME.role}</div></div>
+          <div className="min-w-0 flex-1"><div className="text-[14px] font-medium truncate text-ntext">{ME.name}</div><div className="text-[11px] text-nfaint truncate">{ME.grade}</div></div>
+          <button onClick={logout} title="로그아웃" className="text-[11px] text-nfaint hover:text-ntext px-1.5 py-1 rounded hover:bg-sidebar shrink-0">로그아웃</button>
         </div>
         <button onClick={reset} className="w-full mt-0.5 text-[11px] text-nfaint hover:text-nsub py-1">↺ 데모 초기화</button>
       </div>
     </aside>
   );
+
+  if(!currentUser) return <AuthScreen store={store} setStore={setStore} onAuth={login}/>;
 
   return <div className="h-full flex bg-page">
     <div className="hidden md:flex">{Side}</div>
@@ -935,7 +935,7 @@ function App(){
             <input placeholder="검색 (프로젝트·채널·문서)" className="bg-transparent outline-none text-sm w-full text-ntext"/>
           </div>
         </div>
-        <Tag bg="#dbeddb" fg="#1c3829" dot="#0f9960">온라인 {MEMBERS.length-1}</Tag>
+        <Tag bg="#dbeddb" fg="#1c3829" dot="#0f9960">온라인 {MEMBERS.length}</Tag>
       </header>
       {view==="channels"
         ? <div className="flex-1 min-h-0 bg-page">{Body}</div>
