@@ -277,13 +277,13 @@ function Channels({store,setStore,cur}){
       ns.activity.unshift({id:"a"+Date.now(),who:ME.id,t,text:`#${ch.name} 에 메시지 작성`});ns.activity=ns.activity.slice(0,8);return ns;});
     setText("");
   }
-  return <div className="fadein ncard overflow-hidden max-w-[1180px] mx-auto flex flex-col h-[calc(100vh-118px)]">
-    <div className="px-5 py-3 border-b border-line flex items-center gap-2 shrink-0">
+  return <div className="fadein flex flex-col h-full bg-page">
+    <div className="px-6 py-3.5 border-b border-line flex items-center gap-2 shrink-0">
       <span className="text-nfaint">#</span><span className="font-semibold text-[15px]">{ch.name}</span>
       {ch.locked && <Tag bg="#ffe2dd" fg="#5d1715">리더 공지</Tag>}
       <span className="ml-auto text-[12px] text-nfaint">{ch.messages.length}개 메시지</span>
     </div>
-    <div className="flex-1 overflow-y-auto scrollthin px-5 py-4 space-y-4">
+    <div className="flex-1 overflow-y-auto scrollthin px-6 py-4 space-y-4">
       {ch.messages.length===0 && <div className="text-sm text-nfaint mt-8 text-center">아직 메시지가 없습니다. 첫 메시지를 남겨보세요.</div>}
       {ch.messages.map(m=>(
         <div key={m.id} className="flex gap-3">
@@ -300,8 +300,8 @@ function Channels({store,setStore,cur}){
       ))}
       <div ref={endRef}/>
     </div>
-    <div className="p-3 border-t border-line shrink-0">
-      <div className="flex items-center gap-2 bg-sidebar border border-line rounded-lg px-3 py-2">
+    <div className="px-6 py-3 border-t border-line shrink-0">
+      <div className="flex items-center gap-2 bg-page border border-[#dcdbd7] rounded-lg px-3 py-2.5">
         <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()}
           placeholder={`#${ch.name} 에 메시지 보내기…`} className="flex-1 bg-transparent outline-none text-sm" />
         <button onClick={send} className="text-sm font-medium btn-dark px-3 py-1 rounded-md">보내기</button>
@@ -673,7 +673,9 @@ function App(){
         </div>
         <Tag bg="#dbeddb" fg="#1c3829" dot="#0f9960">온라인 {MEMBERS.length-1}</Tag>
       </header>
-      <div className="flex-1 overflow-y-auto scrollthin p-4 md:p-7 bg-page">{Body}</div>
+      {view==="channels"
+        ? <div className="flex-1 min-h-0 bg-page">{Body}</div>
+        : <div className="flex-1 overflow-y-auto scrollthin p-4 md:p-7 bg-page">{Body}</div>}
     </main>
   </div>;
 }
