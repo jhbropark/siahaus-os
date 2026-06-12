@@ -54,29 +54,32 @@
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useMemo, useRef } = React;
 
-const STORE_KEY = "siahaus_os_v6";
+const STORE_KEY = "siahaus_os_v7";
 
 const SEED_MEMBERS = [
-  { id:"ceo",  name:"박준혁", email:"ceo@sia.haus",   password:"sia1234", grade:"CEO", avatar:"준", color:"#eb5757", photo:null },
-  { id:"cd",   name:"문은준", email:"cd@sia.haus",    password:"sia1234", grade:"Creative Director", avatar:"은", color:"#9a6dd7", photo:null },
-  { id:"a3d",  name:"김서아", email:"sua@sia.haus",   password:"sia1234", grade:"Member", avatar:"서", color:"#2383e2", photo:null },
-  { id:"ta",   name:"이도윤", email:"doyun@sia.haus", password:"sia1234", grade:"Lead", avatar:"도", color:"#0f9960", photo:null },
-  { id:"vd",   name:"정하린", email:"harin@sia.haus", password:"sia1234", grade:"Member", avatar:"하", color:"#d9730d", photo:null },
-  { id:"col",  name:"홍인숙", email:"insuk@ext.com",  password:"sia1234", grade:"Collaborator", avatar:"홍", color:"#9b9a97", photo:null },
+  { id:"ceo",  name:"박준혁", email:"ceo@sia.haus",   password:"sia1234", grade:"전체 허용", status:"active", avatar:"준", color:"#eb5757", photo:null },
+  { id:"cd",   name:"문은준", email:"cd@sia.haus",    password:"sia1234", grade:"편집 허용", status:"active", avatar:"은", color:"#9a6dd7", photo:null },
+  { id:"a3d",  name:"김서아", email:"sua@sia.haus",   password:"sia1234", grade:"편집 허용", status:"active", avatar:"서", color:"#2383e2", photo:null },
+  { id:"ta",   name:"이도윤", email:"doyun@sia.haus", password:"sia1234", grade:"편집 허용", status:"active", avatar:"도", color:"#0f9960", photo:null },
+  { id:"vd",   name:"정하린", email:"harin@sia.haus", password:"sia1234", grade:"댓글 허용", status:"active", avatar:"하", color:"#d9730d", photo:null },
+  { id:"col",  name:"홍인숙", email:"insuk@ext.com",  password:"sia1234", grade:"읽기 허용", status:"active", avatar:"홍", color:"#9b9a97", photo:null },
+  { id:"pend1",name:"황유근", email:"yugeun@sia.haus",password:"sia1234", grade:null, status:"pending", avatar:"황", color:"#2383e2", photo:null },
 ];
 let MEMBERS = SEED_MEMBERS.map(m=>({...m}));
 let ME = { ...SEED_MEMBERS[0] };
 const AUTH_KEY = "siahaus_os_auth";
 const AVATAR_COLORS = ["#eb5757","#9a6dd7","#2383e2","#0f9960","#d9730d","#0b7285","#c2255c","#5c4b00","#37352f","#9b9a97"];
-const GRADES = ["CEO","Creative Director","Lead","Member","Collaborator"];
-const GRADE_PERMS = {
-  "CEO":{ch:"전체 + 공지작성",proj:"전체 관리",ext:"전체",bg:"#ffe2dd",fg:"#5d1715"},
-  "Creative Director":{ch:"전체 + 공지작성",proj:"전체 관리",ext:"전체",bg:"#eae4f2",fg:"#412a5e"},
-  "Lead":{ch:"업무채널 + 일부공지",proj:"담당 도메인",ext:"담당",bg:"#ddebf1",fg:"#183347"},
-  "Member":{ch:"업무채널 작성",proj:"담당 카드",ext:"담당",bg:"#dbeddb",fg:"#1c3829"},
-  "Collaborator":{ch:"초대 채널만",proj:"초대 카드만",ext:"초대분만",bg:"#e3e2e0",fg:"#3c3b39"},
+const PERMS = ["전체 허용","편집 허용","댓글 허용","읽기 허용","사용 권한 없음"];
+const PERM_META = {
+  "전체 허용":{desc:"편집·제안·댓글·공유 모두 가능",bg:"#dbeddb",fg:"#1c3829"},
+  "편집 허용":{desc:"편집·제안·댓글 달기",bg:"#ddebf1",fg:"#183347"},
+  "댓글 허용":{desc:"제안과 댓글 달기",bg:"#fbf3db",fg:"#5c4b00"},
+  "읽기 허용":{desc:"읽기만 가능",bg:"#e3e2e0",fg:"#3c3b39"},
+  "사용 권한 없음":{desc:"접근 차단",bg:"#ffe2dd",fg:"#5d1715"},
 };
-const memGrade = m => GRADE_PERMS[m&&m.grade] ? m.grade : "Member";
+const memPerm = m => PERM_META[m&&m.grade] ? m.grade : "읽기 허용";
+const ADMIN_PERM = "전체 허용";
+const isAdmin = u => !!(u && u.grade===ADMIN_PERM);
 
 const SEED = {
   members: SEED_MEMBERS.map(m=>({...m})),
@@ -669,9 +672,9 @@ function Knowledge({store,focus}){
   </Section>;
 }
 
-function MemberForm({init,onClose,onSave,onDelete}){
+function MemberForm({init,admin,onClose,onSave,onDelete}){
   const editing = !!init;
-  const [f,setF]=useState(init ? {...init} : {name:"",grade:"Member",color:AVATAR_COLORS[2],photo:null});
+  const [f,setF]=useState(init ? {...init} : {name:"",grade:"읽기 허용",color:AVATAR_COLORS[2],photo:null});
   const initial = (f.name.trim()[0]||"?");
   return <Modal onClose={onClose}>
     <div className="flex items-center justify-between mb-4">
@@ -692,6 +695,7 @@ function MemberForm({init,onClose,onSave,onDelete}){
     </div>
     <div className="space-y-3">
       <Field label="이름"><input className="inp" value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="예: 박서준"/></Field>
+      {admin && <Field label="권한 등급"><select className="inp" value={f.grade||"읽기 허용"} onChange={e=>setF({...f,grade:e.target.value})}>{PERMS.map(p=><option key={p}>{p}</option>)}</select><div className="text-[11px] text-nfaint mt-1">{(PERM_META[f.grade]||{}).desc||""}</div></Field>}
       {!f.photo && <Field label="기본 아바타 색상"><div className="flex flex-wrap gap-2 pt-1">
         {AVATAR_COLORS.map(c=><button key={c} onClick={()=>setF({...f,color:c})} className={"w-7 h-7 rounded-full transition "+(f.color===c?"ring-2 ring-offset-2 ring-[#9b9a97]":"")} style={{background:c}} aria-label="색상"/>)}
       </div></Field>}
@@ -705,53 +709,75 @@ function MemberForm({init,onClose,onSave,onDelete}){
 
 function Members({store,setStore}){
   const [editing,setEditing]=useState(null);
+  const [approveFor,setApproveFor]=useState(null);
   const list = store.members||MEMBERS;
+  const admin = isAdmin(ME);
+  const pending = list.filter(m=>m.status==="pending");
+  const active = list.filter(m=>m.status!=="pending");
   function saveMember(data){
     setStore(s=>{const ns=structuredClone(s); ns.members=ns.members||[];
-      if(editing==="new"){ ns.members.push({...data,id:"u"+Date.now()}); }
+      if(editing==="new"){ ns.members.push({...data,id:"u"+Date.now(),status:"active",grade:data.grade||"읽기 허용"}); }
       else { const i=ns.members.findIndex(x=>x.id===editing); if(i>=0) ns.members[i]={...ns.members[i],...data}; }
       return ns;});
     setEditing(null);
   }
-  function removeMember(id){ const nm=member(id).name; if(!confirm(`${nm} 님을 멤버에서 삭제할까요?`)) return; setStore(s=>({...structuredClone(s), members:(s.members||[]).filter(x=>x.id!==id)})); setEditing(null); }
+  function removeMember(id){ const nm=member(id).name; if(!confirm(`${nm} 님을 삭제할까요?`)) return; setStore(s=>({...structuredClone(s), members:(s.members||[]).filter(x=>x.id!==id)})); setEditing(null); }
+  function approve(id,perm){ setStore(s=>{const ns=structuredClone(s); const m=(ns.members||[]).find(x=>x.id===id); if(m){m.status="active";m.grade=perm;} return ns;}); setApproveFor(null); }
   const editMember = (editing && editing!=="new") ? list.find(m=>m.id===editing) : null;
   return <Section title="멤버 · 프로필" desc="조직 구성과 권한 등급 · 카드를 눌러 프로필 수정"
-    right={<button onClick={()=>setEditing("new")} className="text-[13px] btn-dark font-medium px-3 py-1.5 rounded-md">+ 멤버 추가</button>}>
+    right={admin && <button onClick={()=>setEditing("new")} className="text-[13px] btn-dark font-medium px-3 py-1.5 rounded-md">+ 멤버 추가</button>}>
+
+    {admin && pending.length>0 && <div className="ncard nshadow p-4 mb-4" style={{borderColor:"#f0d27a"}}>
+      <div className="flex items-center gap-2 mb-3"><span className="font-semibold text-[15px]">가입 신청</span><Tag bg="#fbf3db" fg="#5c4b00">{pending.length}</Tag></div>
+      <div className="space-y-2">
+        {pending.map(m=>(
+          <div key={m.id} className="flex items-center gap-3 p-2 rounded-md bg-sidebar">
+            <Avatar id={m.id} size={36}/>
+            <div className="min-w-0 flex-1"><div className="font-medium text-[14px] text-ntext truncate">{m.name}</div><div className="text-[12px] text-nfaint truncate">{m.email}</div></div>
+            <div className="relative shrink-0">
+              <button onClick={()=>setApproveFor(approveFor===m.id?null:m.id)} className="text-[12px] btn-dark px-2.5 py-1.5 rounded-md">승인 · 권한 지정 ▾</button>
+              {approveFor===m.id && <div className="absolute right-0 top-full mt-1 z-30 w-60 bg-page border border-line rounded-lg nshadow p-1">
+                {PERMS.map(p=><button key={p} onClick={()=>approve(m.id,p)} className="w-full text-left px-2.5 py-2 rounded-md hover:bg-sidebar">
+                  <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{background:PERM_META[p].fg}}/><span className="text-[13px] font-medium text-ntext">{p}</span></div>
+                  <div className="text-[11px] text-nfaint pl-3.5">{PERM_META[p].desc}</div>
+                </button>)}
+              </div>}
+            </div>
+            <button onClick={()=>removeMember(m.id)} title="거절" className="text-[12px] text-nsub hover:text-[#a32d2d] px-2 py-1.5 shrink-0">거절</button>
+          </div>
+        ))}
+      </div>
+    </div>}
+
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {list.map(m=>{
-        const g=GRADE_PERMS[memGrade(m)];
-        return <div key={m.id} onClick={()=>setEditing(m.id)} className="group ncard nshadow nshadow-h p-4 flex items-start gap-3 cursor-pointer transition">
+      {active.map(m=>{
+        const p=memPerm(m), pm=PERM_META[p];
+        const canEdit = admin || m.id===ME.id;
+        return <div key={m.id} onClick={()=>canEdit&&setEditing(m.id)} className={"group ncard nshadow p-4 flex items-start gap-3 transition "+(canEdit?"nshadow-h cursor-pointer":"")}>
           <Avatar id={m.id} size={42}/>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5"><span className="font-semibold text-ntext truncate">{m.name}</span>{m.id===ME.id && <span className="text-[10px] text-nfaint px-1 py-0.5 rounded bg-sidebar shrink-0">나</span>}</div>
             <div className="text-[12px] text-nsub truncate">{m.email||""}</div>
-            <div className="mt-1.5"><Tag bg={g.bg} fg={g.fg}>{memGrade(m)}</Tag></div>
+            <div className="mt-1.5"><Tag bg={pm.bg} fg={pm.fg}>{p}</Tag></div>
           </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
+          {canEdit && <div className="flex flex-col items-end gap-1 shrink-0">
             <span className="opacity-0 group-hover:opacity-100 transition text-[11px] text-nfaint">수정 ✎</span>
-            {m.id!==ME.id && <button onClick={(e)=>{e.stopPropagation();removeMember(m.id);}} title="삭제" className="opacity-0 group-hover:opacity-100 transition w-6 h-6 grid place-items-center rounded-md text-nfaint hover:bg-[#fcebeb] hover:text-[#a32d2d]">✕</button>}
-          </div>
+            {admin && m.id!==ME.id && <button onClick={(e)=>{e.stopPropagation();removeMember(m.id);}} title="삭제" className="opacity-0 group-hover:opacity-100 transition w-6 h-6 grid place-items-center rounded-md text-nfaint hover:bg-[#fcebeb] hover:text-[#a32d2d]">✕</button>}
+          </div>}
         </div>;
       })}
     </div>
-    {editing && <MemberForm init={editMember} onClose={()=>setEditing(null)} onSave={saveMember} onDelete={()=>removeMember(editing)}/>}
+    {editing && <MemberForm init={editMember} admin={admin} onClose={()=>setEditing(null)} onSave={saveMember} onDelete={()=>removeMember(editing)}/>}
     <div className="ncard nshadow p-5 mt-4">
-      <h3 className="font-semibold mb-3">권한 등급 요약</h3>
-      <div className="overflow-x-auto"><table className="w-full text-sm">
-        <thead><tr className="text-nfaint text-[12px] text-left border-b border-line">
-          <th className="py-2 pr-4 font-medium">역할</th><th className="pr-4 font-medium">채널</th><th className="pr-4 font-medium">프로젝트</th><th className="font-medium">외부 접근</th></tr></thead>
-        <tbody className="text-ntext">
-          {[["CEO","전체 + 공지작성","전체 관리","전체"],
-            ["Creative Director","전체 + 공지작성","전체 관리","전체"],
-            ["Lead","업무채널 + 일부공지","담당 도메인","담당"],
-            ["Member","업무채널 작성","담당 카드","담당"],
-            ["Collaborator","초대 채널만","초대 카드만","초대분만"]].map((r,i)=>(
-            <tr key={i} className="border-b border-line last:border-0">
-              {r.map((c,j)=><td key={j} className="py-2.5 pr-4">{c}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table></div>
+      <h3 className="font-semibold mb-3">권한 등급</h3>
+      <div className="space-y-1">
+        {PERMS.map(p=>(
+          <div key={p} className="flex items-center gap-3 text-sm py-2 border-b border-line last:border-0">
+            <span className="shrink-0 w-28"><Tag bg={PERM_META[p].bg} fg={PERM_META[p].fg}>{p}</Tag></span>
+            <span className="text-nsub">{PERM_META[p].desc}</span>
+          </div>
+        ))}
+      </div>
     </div>
   </Section>;
 }
@@ -766,21 +792,23 @@ function Modal({children,onClose}){
 function AuthScreen({store,setStore,onAuth}){
   const [mode,setMode]=useState("login");
   const [lf,setLf]=useState({email:"",password:""});
-  const [sf,setSf]=useState({name:"",email:"",password:"",grade:"Member",color:AVATAR_COLORS[2],photo:null});
+  const [sf,setSf]=useState({name:"",email:"",password:"",color:AVATAR_COLORS[2],photo:null});
   const [err,setErr]=useState("");
   const users = store.members||[];
   function doLogin(){
     const u=users.find(m=>m.email && m.email.toLowerCase()===lf.email.trim().toLowerCase() && m.password===lf.password);
     if(!u){ setErr("이메일 또는 비밀번호가 올바르지 않습니다."); return; }
+    if(u.status==="pending"){ setErr("관리자 승인 대기 중입니다. 승인 후 이용할 수 있어요."); return; }
+    if(u.grade==="사용 권한 없음"){ setErr("사용 권한이 없습니다. 관리자에게 문의하세요."); return; }
     onAuth(u.id);
   }
   function doSignup(){
     if(!sf.name.trim()||!sf.email.trim()||!sf.password){ setErr("이름·이메일·비밀번호를 모두 입력하세요."); return; }
     if(users.some(m=>m.email && m.email.toLowerCase()===sf.email.trim().toLowerCase())){ setErr("이미 가입된 이메일입니다."); return; }
     const id="u"+Date.now();
-    const nu={ id, name:sf.name.trim(), email:sf.email.trim(), password:sf.password, grade:sf.grade, color:sf.color, photo:sf.photo, avatar:sf.name.trim()[0] };
+    const nu={ id, name:sf.name.trim(), email:sf.email.trim(), password:sf.password, grade:null, status:"pending", color:sf.color, photo:sf.photo, avatar:sf.name.trim()[0] };
     setStore(s=>{const ns=structuredClone(s); ns.members=ns.members||[]; ns.members.push(nu); return ns;});
-    onAuth(id);
+    setErr(""); setMode("done");
   }
   return <div className="h-full w-full flex items-center justify-center bg-sidebar p-4">
     <div className="w-full max-w-sm">
@@ -789,11 +817,16 @@ function AuthScreen({store,setStore,onAuth}){
         <div><div className="font-bold text-[18px] leading-none text-ntext">sia.haus</div><div className="text-[11px] text-nfaint mt-1">Communication OS</div></div>
       </div>
       <div className="bg-page border border-line rounded-xl nshadow p-6">
-        <div className="flex gap-1 mb-5 bg-sidebar rounded-lg p-1">
+        {mode!=="done" && <div className="flex gap-1 mb-5 bg-sidebar rounded-lg p-1">
           <button onClick={()=>{setMode("login");setErr("");}} className={"flex-1 py-1.5 rounded-md text-[13px] font-medium transition "+(mode==="login"?"bg-page text-ntext nshadow":"text-nsub")}>로그인</button>
           <button onClick={()=>{setMode("signup");setErr("");}} className={"flex-1 py-1.5 rounded-md text-[13px] font-medium transition "+(mode==="signup"?"bg-page text-ntext nshadow":"text-nsub")}>회원가입</button>
-        </div>
-        {mode==="login" ? <div className="space-y-3">
+        </div>}
+        {mode==="done" ? <div className="text-center py-4">
+          <div className="w-12 h-12 rounded-full bg-[#dbeddb] text-[#1c3829] grid place-items-center mx-auto mb-3 text-[22px]">✓</div>
+          <div className="font-semibold text-ntext mb-1">가입 신청이 접수되었습니다</div>
+          <div className="text-[13px] text-nsub mb-4 leading-relaxed">관리자가 승인하면서 권한을 지정해 드립니다.<br/>승인 후 로그인하실 수 있어요.</div>
+          <button onClick={()=>{setMode("login");setErr("");}} className="btn-dark px-4 py-2 rounded-md text-sm font-medium">로그인 화면으로</button>
+        </div> : mode==="login" ? <div className="space-y-3">
           <Field label="이메일"><input className="inp" value={lf.email} onChange={e=>setLf({...lf,email:e.target.value})} onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="ceo@sia.haus"/></Field>
           <Field label="비밀번호"><input type="password" className="inp" value={lf.password} onChange={e=>setLf({...lf,password:e.target.value})} onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="••••••"/></Field>
           {err && <div className="text-[12px] text-[#a32d2d]">{err}</div>}
@@ -813,10 +846,10 @@ function AuthScreen({store,setStore,onAuth}){
           <Field label="이름"><input className="inp" value={sf.name} onChange={e=>setSf({...sf,name:e.target.value})} placeholder="예: 황유근"/></Field>
           <Field label="이메일"><input className="inp" value={sf.email} onChange={e=>setSf({...sf,email:e.target.value})} placeholder="you@sia.haus"/></Field>
           <Field label="비밀번호"><input type="password" className="inp" value={sf.password} onChange={e=>setSf({...sf,password:e.target.value})} placeholder="••••••"/></Field>
-          <Field label="권한 등급 (가입 시 부여)"><select className="inp" value={sf.grade} onChange={e=>setSf({...sf,grade:e.target.value})}>{GRADES.map(g=><option key={g}>{g}</option>)}</select></Field>
           {!sf.photo && <Field label="기본 아바타 색상"><div className="flex flex-wrap gap-2 pt-1">{AVATAR_COLORS.map(c=><button key={c} onClick={()=>setSf({...sf,color:c})} className={"w-6 h-6 rounded-full "+(sf.color===c?"ring-2 ring-offset-2 ring-[#9b9a97]":"")} style={{background:c}} aria-label="색상"/>)}</div></Field>}
+          <div className="text-[11px] text-nfaint">권한 등급은 관리자 승인 시 부여됩니다.</div>
           {err && <div className="text-[12px] text-[#a32d2d]">{err}</div>}
-          <button onClick={doSignup} className="w-full btn-dark py-2 rounded-md text-sm font-medium">가입하고 시작하기</button>
+          <button onClick={doSignup} className="w-full btn-dark py-2 rounded-md text-sm font-medium">가입 신청하기</button>
         </div>}
       </div>
     </div>
