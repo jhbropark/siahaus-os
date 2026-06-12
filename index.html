@@ -294,10 +294,11 @@ function Channels({store,setStore,cur}){
   const [picker,setPicker]=useState(null);
   const [pane,setPane]=useState(null);
   const [mq,setMq]=useState(null);
+  const [rmq,setRmq]=useState(null);
   const endRef=useRef(null);
   const ch = store.channels.find(c=>c.id===cur) || store.channels[0];
   useEffect(()=>{ endRef.current && endRef.current.scrollIntoView(); },[cur,ch&&ch.messages.length]);
-  useEffect(()=>{ setThread(null); setPane(null); setPicker(null); },[cur]);
+  useEffect(()=>{ setThread(null); setPane(null); setPicker(null); setRmq(null); },[cur]);
 
   function patch(msgId,fn){ setStore(s=>{const ns=structuredClone(s);const c=ns.channels.find(x=>x.id===ch.id);const m=c.messages.find(x=>x.id===msgId);if(m)fn(m);return ns;}); }
   const nowStr=()=>new Date().toISOString().slice(0,16).replace("T"," ");
@@ -312,11 +313,14 @@ function Channels({store,setStore,cur}){
   function toggleReact(msgId,emoji){ patch(msgId,m=>{m.reactions=m.reactions||{};const a=m.reactions[emoji]||[]; m.reactions[emoji]=a.includes(ME.id)?a.filter(x=>x!==ME.id):[...a,ME.id]; if(m.reactions[emoji].length===0) delete m.reactions[emoji];}); setPicker(null); }
   function togglePin(msgId){ patch(msgId,m=>{m.pinned=!m.pinned;}); }
   function toggleSave(msgId){ patch(msgId,m=>{m.saved=!m.saved;}); }
-  function sendReply(msgId){ if(!rtext.trim())return; patch(msgId,m=>{m.replies=m.replies||[];m.replies.push({id:"r"+Date.now(),who:ME.id,t:nowStr(),text:rtext.trim()});}); setRtext(""); }
+  function sendReply(msgId){ if(!rtext.trim())return; patch(msgId,m=>{m.replies=m.replies||[];m.replies.push({id:"r"+Date.now(),who:ME.id,t:nowStr(),text:rtext.trim()});}); setRtext(""); setRmq(null); }
+  function onRInput(v){ setRtext(v); const mt=v.match(/@([가-힣A-Za-z]*)$/); setRmq(mt?mt[1]:null); }
+  function pickRMention(name){ setRtext(t=>t.replace(/@([가-힣A-Za-z]*)$/,"@"+name+" ")); setRmq(null); }
 
   function onInput(v){ setText(v); const mt=v.match(/@([가-힣A-Za-z]*)$/); setMq(mt?mt[1]:null); }
   function pickMention(name){ setText(t=>t.replace(/@([가-힣A-Za-z]*)$/,"@"+name+" ")); setMq(null); }
   const mentionList = mq!==null ? MEMBERS.filter(m=>m.id!=="col"&&m.name.includes(mq)).slice(0,5) : [];
+  const rMentionList = rmq!==null ? MEMBERS.filter(m=>m.id!=="col"&&m.name.includes(rmq)).slice(0,5) : [];
 
   const pins = ch.messages.filter(m=>m.pinned);
   const saved = ch.messages.filter(m=>m.saved);
@@ -409,9 +413,12 @@ function Channels({store,setStore,cur}){
           </div>
         ))}
       </div>
-      <div className="px-3 py-3 border-t border-line shrink-0">
+      <div className="px-3 py-3 border-t border-line shrink-0 relative">
+        {rMentionList.length>0 && <div className="absolute bottom-full left-3 right-3 mb-1 bg-page border border-line rounded-lg nshadow p-1 z-20">
+          {rMentionList.map(m=><button key={m.id} onClick={()=>pickRMention(m.name)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar text-left"><Avatar id={m.id} size={20}/><span className="text-[13px]">{m.name}</span><span className="text-[11px] text-nfaint">{m.role}</span></button>)}
+        </div>}
         <div className="flex items-center gap-2 bg-page border border-[#dcdbd7] rounded-lg px-3 py-2">
-          <input value={rtext} onChange={e=>setRtext(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendReply(threadMsg.id)} placeholder="답글 남기기…" className="flex-1 bg-transparent outline-none text-sm"/>
+          <input value={rtext} onChange={e=>onRInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&rMentionList.length>0){e.preventDefault();pickRMention(rMentionList[0].name);}else if(e.key==="Enter"){sendReply(threadMsg.id);}}} placeholder="답글 남기기… (@로 멘션)" className="flex-1 bg-transparent outline-none text-sm"/>
           <button onClick={()=>sendReply(threadMsg.id)} className="text-sm font-medium btn-dark px-3 py-1 rounded-md">답글</button>
         </div>
       </div>
