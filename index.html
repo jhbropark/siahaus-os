@@ -54,9 +54,9 @@
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useMemo, useRef } = React;
 
-const STORE_KEY = "siahaus_os_v3";
+const STORE_KEY = "siahaus_os_v4";
 
-const MEMBERS = [
+const SEED_MEMBERS = [
   { id:"ceo",  name:"박준혁", role:"CEO", avatar:"준", color:"#eb5757" },
   { id:"cd",   name:"문은준", role:"Creative Director", avatar:"은", color:"#9a6dd7" },
   { id:"a3d",  name:"김서아", role:"3D Artist", avatar:"서", color:"#2383e2" },
@@ -64,9 +64,12 @@ const MEMBERS = [
   { id:"vd",   name:"정하린", role:"Visual Designer", avatar:"하", color:"#d9730d" },
   { id:"col",  name:"홍인숙", role:"Collaborator (외부)", avatar:"홍", color:"#9b9a97" },
 ];
-const ME = MEMBERS[0];
+let MEMBERS = SEED_MEMBERS.map(m=>({...m}));
+const ME = { id:"ceo", name:"박준혁", role:"CEO", avatar:"준", color:"#eb5757" };
+const AVATAR_COLORS = ["#eb5757","#9a6dd7","#2383e2","#0f9960","#d9730d","#0b7285","#c2255c","#5c4b00","#37352f","#9b9a97"];
 
 const SEED = {
+  members: SEED_MEMBERS.map(m=>({...m})),
   channels: [
     { id:"c1", group:"공지", name:"공지-사내공지", locked:true,
       messages:[
@@ -126,7 +129,7 @@ const SEED = {
 };
 
 function loadStore(){
-  try { const r = localStorage.getItem(STORE_KEY); if(r) return JSON.parse(r); } catch(e){}
+  try { const r = localStorage.getItem(STORE_KEY); if(r){ const p=JSON.parse(r); if(!p.members||!p.members.length) p.members=SEED_MEMBERS.map(m=>({...m})); return p; } } catch(e){}
   return structuredClone(SEED);
 }
 function saveStore(s){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }catch(e){} }
@@ -646,19 +649,51 @@ function Knowledge({store,focus}){
   </Section>;
 }
 
-function Members(){
-  return <Section title="멤버 · 역할" desc="조직 구성과 권한 등급">
+function AddMember({onClose,onAdd}){
+  const [f,setF]=useState({name:"",role:"Member",color:AVATAR_COLORS[2]});
+  const initial = (f.name.trim()[0]||"?");
+  return <Modal onClose={onClose}>
+    <h2 className="text-lg font-bold mb-4 text-ntext">멤버 추가</h2>
+    <div className="flex items-center gap-3 mb-4">
+      <div className="rounded-full grid place-items-center font-semibold text-white shrink-0" style={{width:44,height:44,background:f.color,fontSize:18}}>{initial}</div>
+      <div className="text-[12px] text-nsub">이름 첫 글자가 아바타로 표시됩니다</div>
+    </div>
+    <div className="space-y-3">
+      <Field label="이름"><input className="inp" value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="예: 박서준"/></Field>
+      <Field label="역할"><select className="inp" value={f.role} onChange={e=>setF({...f,role:e.target.value})}>{["CEO","Creative Director","3D Artist","Technical Artist","Visual Designer","Lead","Member","Collaborator (외부)"].map(r=><option key={r}>{r}</option>)}</select></Field>
+      <Field label="아바타 색상"><div className="flex flex-wrap gap-2 pt-1">
+        {AVATAR_COLORS.map(c=><button key={c} onClick={()=>setF({...f,color:c})} className={"w-7 h-7 rounded-full transition "+(f.color===c?"ring-2 ring-offset-2 ring-[#9b9a97]":"")} style={{background:c}} aria-label="색상"/>)}
+      </div></Field>
+    </div>
+    <div className="flex justify-end gap-2 mt-5">
+      <button onClick={onClose} className="text-sm px-3 py-1.5 rounded-md border border-line hov text-nsub">취소</button>
+      <button disabled={!f.name.trim()} onClick={()=>onAdd({id:"u"+Date.now(),name:f.name.trim(),role:f.role,avatar:f.name.trim()[0],color:f.color})} className="text-sm px-3 py-1.5 rounded-md btn-dark disabled:opacity-40">추가</button>
+    </div>
+  </Modal>;
+}
+
+function Members({store,setStore}){
+  const [adding,setAdding]=useState(false);
+  const list = store.members||MEMBERS;
+  function addMember(mm){ setStore(s=>{const ns=structuredClone(s); ns.members=ns.members||[]; ns.members.push(mm); return ns;}); setAdding(false); }
+  function removeMember(id){ const nm=member(id).name; if(!confirm(`${nm} 님을 멤버에서 삭제할까요?`)) return; setStore(s=>({...structuredClone(s), members:(s.members||[]).filter(x=>x.id!==id)})); }
+  return <Section title="멤버 · 역할" desc="조직 구성과 권한 등급"
+    right={<button onClick={()=>setAdding(true)} className="text-[13px] btn-dark font-medium px-3 py-1.5 rounded-md">+ 멤버 추가</button>}>
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {MEMBERS.map(m=>(
-        <div key={m.id} className="ncard nshadow p-4 flex items-center gap-3">
+      {list.map(m=>(
+        <div key={m.id} className="group ncard nshadow p-4 flex items-center gap-3">
           <Avatar id={m.id} size={42}/>
-          <div className="min-w-0">
-            <div className="font-semibold text-ntext">{m.name}</div>
-            <div className="text-[12px] text-nsub">{m.role}</div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-ntext truncate">{m.name}</div>
+            <div className="text-[12px] text-nsub truncate">{m.role}</div>
           </div>
+          {m.id===ME.id
+            ? <span className="text-[10px] text-nfaint shrink-0 px-1.5 py-0.5 rounded bg-sidebar">나</span>
+            : <button onClick={()=>removeMember(m.id)} title="삭제" className="opacity-0 group-hover:opacity-100 transition w-7 h-7 grid place-items-center rounded-md text-nfaint hover:bg-[#fcebeb] hover:text-[#a32d2d] shrink-0">✕</button>}
         </div>
       ))}
     </div>
+    {adding && <AddMember onClose={()=>setAdding(false)} onAdd={addMember}/>}
     <div className="ncard nshadow p-5 mt-4">
       <h3 className="font-semibold mb-3">권한 등급 요약</h3>
       <div className="overflow-x-auto"><table className="w-full text-sm">
@@ -689,6 +724,7 @@ function Modal({children,onClose}){
 
 function App(){
   const [store,setStore]=useState(loadStore);
+  if(store.members && store.members.length) MEMBERS = store.members;
   const [view,setView]=useState("dashboard");
   const [menu,setMenu]=useState(false);
   const [cur,setCur]=useState(store.channels[0].id);
@@ -720,7 +756,7 @@ function App(){
     : <Projects store={store} setStore={setStore} onOpen={openProject}/>;
   const Body={dashboard:<Dashboard store={store} go={goSec}/>,channels:<Channels store={store} setStore={setStore} cur={cur}/>,
     projects:projectsBody,meetings:<Meetings store={store} focus={mFocus}/>,
-    knowledge:<Knowledge store={store} focus={kFocus}/>,members:<Members/>}[view];
+    knowledge:<Knowledge store={store} focus={kFocus}/>,members:<Members store={store} setStore={setStore}/>}[view];
 
   const Side=(
     <aside className="w-60 shrink-0 border-r border-line bg-sidebar flex flex-col">
