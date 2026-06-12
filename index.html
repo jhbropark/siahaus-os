@@ -51,7 +51,7 @@
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useMemo, useRef } = React;
 
-const STORE_KEY = "siahaus_os_v2";
+const STORE_KEY = "siahaus_os_v3";
 
 const MEMBERS = [
   { id:"ceo",  name:"박준혁", role:"CEO", avatar:"준", color:"#eb5757" },
@@ -67,8 +67,8 @@ const SEED = {
   channels: [
     { id:"c1", group:"공지", name:"공지-사내공지", locked:true,
       messages:[
-        { id:"m1", who:"cd", t:"2026-06-10 09:00", text:"[시스템] sia.haus Communication OS v1 오픈했습니다. 소통은 채널, 기록은 프로젝트/회의록에 남겨주세요." },
-        { id:"m2", who:"ceo", t:"2026-06-10 09:12", text:"[일정] 이번 주 금요일 16:00 주간 마감·회고 진행합니다. ✅로 확인 부탁드려요." },
+        { id:"m1", who:"cd", t:"2026-06-10 09:00", text:"[시스템] sia.haus Communication OS v1 오픈했습니다. 소통은 채널, 기록은 프로젝트/회의록에 남겨주세요.", pinned:true, reactions:{"🎉":["ceo","a3d","vd","ta"]}, replies:[] },
+        { id:"m2", who:"ceo", t:"2026-06-10 09:12", text:"[일정] 이번 주 금요일 16:00 주간 마감·회고 진행합니다. ✅로 확인 부탁드려요.", reactions:{"✅":["a3d","ta","vd","cd"]}, replies:[{id:"r0",who:"vd",t:"2026-06-10 09:20",text:"확인했습니다! 참석하겠습니다 🙆"},{id:"r0b",who:"a3d",t:"2026-06-10 09:24",text:"넵 일정 비워두겠습니다"}] },
       ]},
     { id:"c2", group:"업무", name:"업무-사업기획",
       messages:[ { id:"m3", who:"ceo", t:"2026-06-11 10:30", text:"하반기 IP 라인업 초안 공유드립니다. 의견 ~내일 오전까지 주세요." } ]},
@@ -77,7 +77,7 @@ const SEED = {
     { id:"c4", group:"업무", name:"업무-영상제작",
       messages:[
         { id:"m5", who:"a3d", t:"2026-06-12 09:30", text:"📅 데일리\n✅ 어제: 케이알 3D 레이아웃 1차\n🔜 오늘: 라이팅 셋업\n🚧 막힘: 없음" },
-        { id:"m6", who:"vd", t:"2026-06-12 09:41", text:"신세계 x 홍인숙 썸네일 3안 16:00까지 올리겠습니다." },
+        { id:"m6", who:"vd", t:"2026-06-12 09:41", text:"@문은준 신세계 x 홍인숙 썸네일 3안 16:00까지 올리겠습니다.", reactions:{"👍":["cd","a3d"]}, replies:[{id:"r1",who:"cd",t:"2026-06-12 09:45",text:"톤은 지난번 B안 기준으로 부탁해요"},{id:"r2",who:"vd",t:"2026-06-12 09:47",text:"넵 반영하겠습니다"}] },
       ]},
     { id:"c5", group:"업무", name:"업무-디자인", messages:[] },
     { id:"c6", group:"업무", name:"업무-개발",
@@ -264,49 +264,158 @@ function Dashboard({store, go}){
   </Section>;
 }
 
+const REACT_EMOJIS = ["👍","✅","👀","🔥","❤️","🎉","😄","🙏"];
+function MsgText({text}){
+  const parts = String(text).split(/(@[가-힣A-Za-z]+)/g);
+  return <div className="text-[14px] text-ntext whitespace-pre-wrap leading-relaxed">
+    {parts.map((p,i)=> (p.startsWith("@") && MEMBERS.some(m=>"@"+m.name===p))
+      ? <span key={i} className="px-1 rounded bg-[#eae4f2] text-[#412a5e] font-medium">{p}</span>
+      : <span key={i}>{p}</span>)}
+  </div>;
+}
+function Reactions({m,onToggle}){
+  const r = m.reactions||{};
+  const keys = Object.keys(r).filter(k=>r[k].length>0);
+  if(keys.length===0) return null;
+  return <div className="flex flex-wrap gap-1 mt-1.5">
+    {keys.map(k=>{
+      const mine = r[k].includes(ME.id);
+      return <button key={k} onClick={()=>onToggle(k)} className={"flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[12px] border transition "+(mine?"bg-[#e7f0fb] border-[#9cc4ee] text-[#1a4d80]":"bg-sidebar border-line text-nsub hover:border-[#c7c6c3]")}>
+        <span>{k}</span><span>{r[k].length}</span>
+      </button>;
+    })}
+  </div>;
+}
+
 function Channels({store,setStore,cur}){
   const [text,setText]=useState("");
+  const [thread,setThread]=useState(null);
+  const [rtext,setRtext]=useState("");
+  const [picker,setPicker]=useState(null);
+  const [pane,setPane]=useState(null);
+  const [mq,setMq]=useState(null);
   const endRef=useRef(null);
   const ch = store.channels.find(c=>c.id===cur) || store.channels[0];
   useEffect(()=>{ endRef.current && endRef.current.scrollIntoView(); },[cur,ch&&ch.messages.length]);
+  useEffect(()=>{ setThread(null); setPane(null); setPicker(null); },[cur]);
+
+  function patch(msgId,fn){ setStore(s=>{const ns=structuredClone(s);const c=ns.channels.find(x=>x.id===ch.id);const m=c.messages.find(x=>x.id===msgId);if(m)fn(m);return ns;}); }
+  const nowStr=()=>new Date().toISOString().slice(0,16).replace("T"," ");
   function send(){
     if(!text.trim()) return;
-    const now=new Date(); const t=now.toISOString().slice(0,16).replace("T"," ");
-    const msg={id:"m"+Date.now(),who:ME.id,t,text:text.trim()};
+    const t=nowStr();
+    const msg={id:"m"+Date.now(),who:ME.id,t,text:text.trim(),reactions:{},replies:[]};
     setStore(s=>{const ns=structuredClone(s);ns.channels.find(c=>c.id===ch.id).messages.push(msg);
       ns.activity.unshift({id:"a"+Date.now(),who:ME.id,t,text:`#${ch.name} 에 메시지 작성`});ns.activity=ns.activity.slice(0,8);return ns;});
-    setText("");
+    setText(""); setMq(null);
   }
-  return <div className="fadein flex flex-col h-full bg-page">
-    <div className="px-6 py-3.5 border-b border-line flex items-center gap-2 shrink-0">
-      <span className="text-nfaint">#</span><span className="font-semibold text-[15px]">{ch.name}</span>
-      {ch.locked && <Tag bg="#ffe2dd" fg="#5d1715">리더 공지</Tag>}
-      <span className="ml-auto text-[12px] text-nfaint">{ch.messages.length}개 메시지</span>
-    </div>
-    <div className="flex-1 overflow-y-auto scrollthin px-6 py-4 space-y-4">
-      {ch.messages.length===0 && <div className="text-sm text-nfaint mt-8 text-center">아직 메시지가 없습니다. 첫 메시지를 남겨보세요.</div>}
-      {ch.messages.map(m=>(
-        <div key={m.id} className="flex gap-3">
-          <Avatar id={m.who} size={34}/>
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-2">
-              <b className="font-semibold text-[14px]">{member(m.who).name}</b>
-              <span className="text-[11px] text-nfaint">{member(m.who).role}</span>
-              <span className="text-[11px] text-nfaint">{m.t.slice(5)}</span>
-            </div>
-            <div className="text-[14px] text-ntext whitespace-pre-wrap leading-relaxed">{m.text}</div>
-          </div>
+  function toggleReact(msgId,emoji){ patch(msgId,m=>{m.reactions=m.reactions||{};const a=m.reactions[emoji]||[]; m.reactions[emoji]=a.includes(ME.id)?a.filter(x=>x!==ME.id):[...a,ME.id]; if(m.reactions[emoji].length===0) delete m.reactions[emoji];}); setPicker(null); }
+  function togglePin(msgId){ patch(msgId,m=>{m.pinned=!m.pinned;}); }
+  function toggleSave(msgId){ patch(msgId,m=>{m.saved=!m.saved;}); }
+  function sendReply(msgId){ if(!rtext.trim())return; patch(msgId,m=>{m.replies=m.replies||[];m.replies.push({id:"r"+Date.now(),who:ME.id,t:nowStr(),text:rtext.trim()});}); setRtext(""); }
+
+  function onInput(v){ setText(v); const mt=v.match(/@([가-힣A-Za-z]*)$/); setMq(mt?mt[1]:null); }
+  function pickMention(name){ setText(t=>t.replace(/@([가-힣A-Za-z]*)$/,"@"+name+" ")); setMq(null); }
+  const mentionList = mq!==null ? MEMBERS.filter(m=>m.id!=="col"&&m.name.includes(mq)).slice(0,5) : [];
+
+  const pins = ch.messages.filter(m=>m.pinned);
+  const saved = ch.messages.filter(m=>m.saved);
+  const threadMsg = thread && ch.messages.find(m=>m.id===thread);
+
+  const Msg = ({m,compact})=>(
+    <div className="group relative flex gap-3 px-2 -mx-2 py-1 rounded-md hover:bg-[rgba(55,53,47,.035)]">
+      <Avatar id={m.who} size={34}/>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <b className="font-semibold text-[14px]">{member(m.who).name}</b>
+          <span className="text-[11px] text-nfaint">{member(m.who).role}</span>
+          <span className="text-[11px] text-nfaint">{m.t.slice(5)}</span>
+          {m.pinned && <span className="text-[11px] text-[#d9730d]">📌 고정됨</span>}
         </div>
-      ))}
-      <div ref={endRef}/>
+        <MsgText text={m.text}/>
+        <Reactions m={m} onToggle={(e)=>toggleReact(m.id,e)}/>
+        {!compact && (m.replies&&m.replies.length>0) &&
+          <button onClick={()=>setThread(m.id)} className="mt-1.5 inline-flex items-center gap-1.5 text-[12px] text-nblue hover:underline">
+            <span className="flex -space-x-1">{[...new Set(m.replies.map(r=>r.who))].slice(0,3).map(w=><span key={w} className="ring-2 ring-white rounded-full"><Avatar id={w} size={16}/></span>)}</span>
+            {m.replies.length}개 답글
+          </button>}
+      </div>
+      {!compact && <div className="absolute -top-3 right-2 hidden group-hover:flex items-center gap-0.5 bg-page border border-line rounded-md nshadow px-0.5 py-0.5 z-10">
+        <button onClick={()=>setPicker(picker===m.id?null:m.id)} className="w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[14px]">😊</button>
+        <button onClick={()=>setThread(m.id)} className="w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[13px]">💬</button>
+        <button onClick={()=>togglePin(m.id)} className={"w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[12px] "+(m.pinned?"opacity-100":"opacity-70")}>📌</button>
+        <button onClick={()=>toggleSave(m.id)} className={"w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[12px] "+(m.saved?"opacity-100":"opacity-70")}>🔖</button>
+      </div>}
+      {!compact && picker===m.id && <div className="absolute top-6 right-2 z-20 bg-page border border-line rounded-lg nshadow px-1.5 py-1 flex gap-0.5">
+        {REACT_EMOJIS.map(e=><button key={e} onClick={()=>toggleReact(m.id,e)} className="w-8 h-8 grid place-items-center rounded hover:bg-sidebar text-[16px]">{e}</button>)}
+      </div>}
     </div>
-    <div className="px-6 py-3 border-t border-line shrink-0">
-      <div className="flex items-center gap-2 bg-page border border-[#dcdbd7] rounded-lg px-3 py-2.5">
-        <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()}
-          placeholder={`#${ch.name} 에 메시지 보내기…`} className="flex-1 bg-transparent outline-none text-sm" />
-        <button onClick={send} className="text-sm font-medium btn-dark px-3 py-1 rounded-md">보내기</button>
+  );
+
+  return <div className="fadein flex h-full bg-page">
+    <div className="flex-1 flex flex-col min-w-0">
+      <div className="px-6 py-3 border-b border-line flex items-center gap-2 shrink-0 relative">
+        <span className="text-nfaint">#</span><span className="font-semibold text-[15px]">{ch.name}</span>
+        {ch.locked && <Tag bg="#ffe2dd" fg="#5d1715">리더 공지</Tag>}
+        <div className="ml-auto flex items-center gap-1">
+          <button onClick={()=>setPane(pane==="pins"?null:"pins")} className={"text-[12px] px-2 py-1 rounded-md hover:bg-sidebar "+(pane==="pins"?"bg-sidebar text-ntext":"text-nsub")}>📌 {pins.length}</button>
+          <button onClick={()=>setPane(pane==="saved"?null:"saved")} className={"text-[12px] px-2 py-1 rounded-md hover:bg-sidebar "+(pane==="saved"?"bg-sidebar text-ntext":"text-nsub")}>🔖 {saved.length}</button>
+        </div>
+        {pane && <div className="absolute right-4 top-12 z-30 w-80 bg-page border border-line rounded-lg nshadow p-2 max-h-[60vh] overflow-y-auto scrollthin">
+          <div className="text-[12px] font-semibold text-nsub px-1 pb-1">{pane==="pins"?"📌 고정된 메시지":"🔖 저장한 메시지"}</div>
+          {(pane==="pins"?pins:saved).length===0 && <div className="text-[12px] text-nfaint px-1 py-2">없음</div>}
+          {(pane==="pins"?pins:saved).map(m=>(
+            <button key={m.id} onClick={()=>{setThread(m.id);setPane(null);}} className="block w-full text-left p-2 rounded-md hover:bg-sidebar">
+              <div className="flex items-center gap-1.5"><Avatar id={m.who} size={18}/><b className="text-[12px] font-semibold">{member(m.who).name}</b><span className="text-[10px] text-nfaint">{m.t.slice(5)}</span></div>
+              <div className="text-[12px] text-nsub mt-0.5 line-clamp-2">{m.text}</div>
+            </button>
+          ))}
+        </div>}
+      </div>
+
+      <div className="flex-1 overflow-y-auto scrollthin px-6 py-4">
+        {ch.messages.length===0 && <div className="text-sm text-nfaint mt-8 text-center">아직 메시지가 없습니다. 첫 메시지를 남겨보세요.</div>}
+        {ch.messages.map(m=><Msg key={m.id} m={m}/>)}
+        <div ref={endRef}/>
+      </div>
+
+      <div className="px-6 py-3 border-t border-line shrink-0 relative">
+        {mentionList.length>0 && <div className="absolute bottom-full left-6 mb-1 w-60 bg-page border border-line rounded-lg nshadow p-1 z-20">
+          {mentionList.map(m=><button key={m.id} onClick={()=>pickMention(m.name)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar text-left"><Avatar id={m.id} size={20}/><span className="text-[13px]">{m.name}</span><span className="text-[11px] text-nfaint">{m.role}</span></button>)}
+        </div>}
+        <div className="flex items-center gap-2 bg-page border border-[#dcdbd7] rounded-lg px-3 py-2.5">
+          <input value={text} onChange={e=>onInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&mentionList.length>0){e.preventDefault();pickMention(mentionList[0].name);}else if(e.key==="Enter"){send();}}}
+            placeholder={`#${ch.name} 에 메시지 보내기…  (@로 멘션)`} className="flex-1 bg-transparent outline-none text-sm" />
+          <button onClick={send} className="text-sm font-medium btn-dark px-3 py-1 rounded-md">보내기</button>
+        </div>
       </div>
     </div>
+
+    {threadMsg && <div className="w-[380px] shrink-0 border-l border-line flex flex-col bg-page">
+      <div className="px-4 py-3 border-b border-line flex items-center justify-between shrink-0">
+        <span className="font-semibold text-[14px]">스레드</span>
+        <button onClick={()=>setThread(null)} className="w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-nsub">✕</button>
+      </div>
+      <div className="flex-1 overflow-y-auto scrollthin px-4 py-3">
+        <Msg m={threadMsg} compact/>
+        <div className="text-[11px] text-nfaint border-b border-line pb-1 mb-2 mt-3">{(threadMsg.replies||[]).length}개 답글</div>
+        {(threadMsg.replies||[]).map(r=>(
+          <div key={r.id} className="flex gap-2.5 py-1.5">
+            <Avatar id={r.who} size={28}/>
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-1.5"><b className="text-[13px] font-semibold">{member(r.who).name}</b><span className="text-[10px] text-nfaint">{r.t.slice(5)}</span></div>
+              <MsgText text={r.text}/>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="px-3 py-3 border-t border-line shrink-0">
+        <div className="flex items-center gap-2 bg-page border border-[#dcdbd7] rounded-lg px-3 py-2">
+          <input value={rtext} onChange={e=>setRtext(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendReply(threadMsg.id)} placeholder="답글 남기기…" className="flex-1 bg-transparent outline-none text-sm"/>
+          <button onClick={()=>sendReply(threadMsg.id)} className="text-sm font-medium btn-dark px-3 py-1 rounded-md">답글</button>
+        </div>
+      </div>
+    </div>}
   </div>;
 }
 
