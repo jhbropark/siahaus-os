@@ -294,13 +294,30 @@ function Dashboard({store, go}){
 }
 
 const REACT_EMOJIS = ["👍","✅","👀","🔥","❤️","🎉","😄","🙏"];
+function firstUrl(text){ const m=String(text).match(/https?:\/\/[^\s]+/); return m?m[0]:null; }
 function MsgText({text}){
-  const parts = String(text).split(/(@[가-힣A-Za-z]+)/g);
-  return <div className="text-[14px] text-ntext whitespace-pre-wrap leading-relaxed">
-    {parts.map((p,i)=> (p.startsWith("@") && MEMBERS.some(m=>"@"+m.name===p))
-      ? <span key={i} className="px-1 rounded bg-[#eae4f2] text-[#412a5e] font-medium">{p}</span>
-      : <span key={i}>{p}</span>)}
+  const parts = String(text).split(/(@[가-힣A-Za-z]+|https?:\/\/[^\s]+)/g);
+  return <div className="text-[14px] text-ntext whitespace-pre-wrap leading-relaxed break-words">
+    {parts.map((p,i)=>{
+      if(/^https?:\/\//.test(p)) return <a key={i} href={p} target="_blank" rel="noreferrer" className="text-nblue hover:underline break-all">{p}</a>;
+      if(p.startsWith("@") && MEMBERS.some(m=>"@"+m.name===p)) return <span key={i} className="px-1 rounded bg-[#eae4f2] text-[#412a5e] font-medium">{p}</span>;
+      return <span key={i}>{p}</span>;
+    })}
   </div>;
+}
+function LinkPreview({url}){
+  let host=url; try{ host=new URL(url).hostname.replace(/^www\./,""); }catch(e){}
+  return <a href={url} target="_blank" rel="noreferrer" className="mt-2 flex items-center gap-2.5 max-w-md border border-line rounded-lg p-2.5 hover:bg-sidebar transition">
+    <img src={"https://www.google.com/s2/favicons?sz=64&domain="+encodeURIComponent(host)} alt="" className="w-7 h-7 rounded shrink-0" onError={(e)=>{e.currentTarget.style.visibility="hidden";}}/>
+    <div className="min-w-0"><div className="text-[13px] font-medium text-ntext truncate">{host}</div><div className="text-[11px] text-nfaint truncate">{url}</div></div>
+  </a>;
+}
+function FileChip({f}){
+  const isImg = f.type && f.type.startsWith("image/");
+  if(isImg) return <a href={f.url} download={f.name} target="_blank" rel="noreferrer" className="mt-2 block max-w-xs"><img src={f.url} alt={f.name} className="rounded-lg border border-line max-h-52 object-cover"/></a>;
+  return <a href={f.url} download={f.name} className="mt-2 inline-flex items-center gap-2 border border-line rounded-lg px-3 py-2 hover:bg-sidebar max-w-xs transition">
+    <span className="text-[18px]">📄</span><div className="min-w-0"><div className="text-[13px] font-medium text-ntext truncate">{f.name}</div><div className="text-[11px] text-nfaint">{Math.round((f.size||0)/1024)} KB · 내려받기</div></div>
+  </a>;
 }
 function Reactions({m,onToggle}){
   const r = m.reactions||{};
@@ -324,25 +341,45 @@ function Channels({store,setStore,cur}){
   const [pane,setPane]=useState(null);
   const [mq,setMq]=useState(null);
   const [rmq,setRmq]=useState(null);
+  const [editId,setEditId]=useState(null);
+  const [etext,setEtext]=useState("");
+  const [rEdit,setREdit]=useState(null);
+  const [reEtext,setReEtext]=useState("");
+  const [tab,setTab]=useState("msg");
+  const [showMembers,setShowMembers]=useState(false);
+  const [file,setFile]=useState(null);
   const endRef=useRef(null);
+  const taRef=useRef(null);
+  const rtaRef=useRef(null);
   const ch = store.channels.find(c=>c.id===cur) || store.channels[0];
+  const onlineMembers = (store.members||MEMBERS).filter(m=>m.status!=="pending");
   useEffect(()=>{ endRef.current && endRef.current.scrollIntoView(); },[cur,ch&&ch.messages.length]);
-  useEffect(()=>{ setThread(null); setPane(null); setPicker(null); setRmq(null); },[cur]);
+  useEffect(()=>{ setThread(null); setPane(null); setPicker(null); setRmq(null); setEditId(null); setREdit(null); setTab("msg"); setShowMembers(false); setFile(null); },[cur]);
 
   function patch(msgId,fn){ setStore(s=>{const ns=structuredClone(s);const c=ns.channels.find(x=>x.id===ch.id);const m=c.messages.find(x=>x.id===msgId);if(m)fn(m);return ns;}); }
   const nowStr=()=>new Date().toISOString().slice(0,16).replace("T"," ");
   function send(){
-    if(!text.trim()) return;
+    if(!text.trim() && !file) return;
     const t=nowStr();
     const msg={id:"m"+Date.now(),who:ME.id,t,text:text.trim(),reactions:{},replies:[]};
+    if(file) msg.file=file;
     setStore(s=>{const ns=structuredClone(s);ns.channels.find(c=>c.id===ch.id).messages.push(msg);
       ns.activity.unshift({id:"a"+Date.now(),who:ME.id,t,text:`#${ch.name} 에 메시지 작성`});ns.activity=ns.activity.slice(0,8);return ns;});
-    setText(""); setMq(null);
+    setText(""); setMq(null); setFile(null); if(taRef.current) taRef.current.style.height="auto";
   }
+  function toggleFav(){ setStore(s=>{const ns=structuredClone(s);const c=ns.channels.find(x=>x.id===ch.id);c.fav=!c.fav;return ns;}); }
+  function pickFile(e){ const f=e.target.files[0]; if(!f){return;} if(f.size>1200000){ alert("1MB 이하 파일만 첨부할 수 있어요 (프로토타입)."); e.target.value=""; return; } const r=new FileReader(); r.onload=()=>setFile({name:f.name,type:f.type,size:f.size,url:r.result}); r.readAsDataURL(f); e.target.value=""; }
+  function startEdit(m){ setEditId(m.id); setEtext(m.text); }
+  function saveEdit(){ const id=editId; if(!etext.trim()){ setEditId(null); return; } patch(id,m=>{m.text=etext.trim(); m.edited=true;}); setEditId(null); }
+  function delMsg(msgId){ if(!confirm("이 메시지를 삭제할까요?")) return; setStore(s=>{const ns=structuredClone(s);const c=ns.channels.find(x=>x.id===ch.id);c.messages=c.messages.filter(x=>x.id!==msgId);return ns;}); if(thread===msgId) setThread(null); setEditId(null); }
+  function delReply(msgId,rid){ if(!confirm("이 답글을 삭제할까요?")) return; patch(msgId,m=>{m.replies=(m.replies||[]).filter(r=>r.id!==rid);}); }
+  function saveReplyEdit(msgId){ const id=rEdit; if(!reEtext.trim()){ setREdit(null); return; } patch(msgId,m=>{const r=(m.replies||[]).find(x=>x.id===id); if(r){r.text=reEtext.trim(); r.edited=true;}}); setREdit(null); }
+  const canManage = m => !!(m && (m.who===ME.id || isAdmin(ME)));
+  function nlInsert(e,setVal){ const el=e.target,s=el.selectionStart,en=el.selectionEnd,v=el.value; const nv=v.slice(0,s)+"\n"+v.slice(en); setVal(nv); requestAnimationFrame(()=>{ try{ el.selectionStart=el.selectionEnd=s+1; el.style.height="auto"; el.style.height=Math.min(el.scrollHeight,180)+"px"; }catch(_){}}); }
   function toggleReact(msgId,emoji){ patch(msgId,m=>{m.reactions=m.reactions||{};const a=m.reactions[emoji]||[]; m.reactions[emoji]=a.includes(ME.id)?a.filter(x=>x!==ME.id):[...a,ME.id]; if(m.reactions[emoji].length===0) delete m.reactions[emoji];}); setPicker(null); }
   function togglePin(msgId){ patch(msgId,m=>{m.pinned=!m.pinned;}); }
   function toggleSave(msgId){ patch(msgId,m=>{m.saved=!m.saved;}); }
-  function sendReply(msgId){ if(!rtext.trim())return; patch(msgId,m=>{m.replies=m.replies||[];m.replies.push({id:"r"+Date.now(),who:ME.id,t:nowStr(),text:rtext.trim()});}); setRtext(""); setRmq(null); }
+  function sendReply(msgId){ if(!rtext.trim())return; patch(msgId,m=>{m.replies=m.replies||[];m.replies.push({id:"r"+Date.now(),who:ME.id,t:nowStr(),text:rtext.trim()});}); setRtext(""); setRmq(null); if(rtaRef.current) rtaRef.current.style.height="auto"; }
   function onRInput(v){ setRtext(v); const mt=v.match(/@([가-힣A-Za-z]*)$/); setRmq(mt?mt[1]:null); }
   function pickRMention(name){ setRtext(t=>t.replace(/@([가-힣A-Za-z]*)$/,"@"+name+" ")); setRmq(null); }
 
@@ -361,11 +398,16 @@ function Channels({store,setStore,cur}){
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <b className="font-semibold text-[14px]">{member(m.who).name}</b>
-          <span className="text-[11px] text-nfaint">{member(m.who).role}</span>
           <span className="text-[11px] text-nfaint">{m.t.slice(5)}</span>
+          {m.edited && <span className="text-[10px] text-nfaint">(수정됨)</span>}
           {m.pinned && <span className="text-[11px] text-[#d9730d]">📌 고정됨</span>}
         </div>
-        <MsgText text={m.text}/>
+        {editId===m.id
+          ? <div className="mt-1">
+              <textarea autoFocus value={etext} onChange={e=>{setEtext(e.target.value);e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,200)+"px";}} onKeyDown={e=>{ if(e.key==="Enter"&&!(e.altKey||e.ctrlKey||e.shiftKey)){e.preventDefault();saveEdit();} else if(e.key==="Enter"&&(e.altKey||e.ctrlKey)){e.preventDefault();nlInsert(e,setEtext);} else if(e.key==="Escape"){setEditId(null);} }} className="w-full bg-page border border-[#9b9a97] rounded-md px-2.5 py-1.5 text-[14px] outline-none resize-none leading-relaxed"/>
+              <div className="flex items-center gap-2 mt-1"><button onClick={saveEdit} className="text-[12px] btn-dark px-2.5 py-1 rounded-md">저장</button><button onClick={()=>setEditId(null)} className="text-[12px] text-nsub px-2 py-1">취소</button><span className="text-[11px] text-nfaint">Enter 저장 · Alt/Ctrl+Enter 줄바꿈</span></div>
+            </div>
+          : <><MsgText text={m.text}/>{firstUrl(m.text) && <LinkPreview url={firstUrl(m.text)}/>}{m.file && <FileChip f={m.file}/>}</>}
         <Reactions m={m} onToggle={(e)=>toggleReact(m.id,e)}/>
         {!compact && (m.replies&&m.replies.length>0) &&
           <button onClick={()=>setThread(m.id)} className="mt-1.5 inline-flex items-center gap-1.5 text-[12px] text-nblue hover:underline">
@@ -373,11 +415,13 @@ function Channels({store,setStore,cur}){
             {m.replies.length}개 답글
           </button>}
       </div>
-      {!compact && <div className="absolute -top-3 right-2 hidden group-hover:flex items-center gap-0.5 bg-page border border-line rounded-md nshadow px-0.5 py-0.5 z-10">
-        <button onClick={()=>setPicker(picker===m.id?null:m.id)} className="w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[14px]">😊</button>
-        <button onClick={()=>setThread(m.id)} className="w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[13px]">💬</button>
-        <button onClick={()=>togglePin(m.id)} className={"w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[12px] "+(m.pinned?"opacity-100":"opacity-70")}>📌</button>
-        <button onClick={()=>toggleSave(m.id)} className={"w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[12px] "+(m.saved?"opacity-100":"opacity-70")}>🔖</button>
+      {!compact && editId!==m.id && <div className="absolute -top-3 right-2 hidden group-hover:flex items-center gap-0.5 bg-page border border-line rounded-md nshadow px-0.5 py-0.5 z-10">
+        <button onClick={()=>setPicker(picker===m.id?null:m.id)} title="반응" className="w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[14px]">😊</button>
+        <button onClick={()=>setThread(m.id)} title="답글" className="w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[13px]">💬</button>
+        {canManage(m) && <button onClick={()=>startEdit(m)} title="수정" className="w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[12px]">✏️</button>}
+        <button onClick={()=>togglePin(m.id)} title="고정" className={"w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[12px] "+(m.pinned?"opacity-100":"opacity-70")}>📌</button>
+        <button onClick={()=>toggleSave(m.id)} title="저장" className={"w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-[12px] "+(m.saved?"opacity-100":"opacity-70")}>🔖</button>
+        {canManage(m) && <button onClick={()=>delMsg(m.id)} title="삭제" className="w-7 h-7 grid place-items-center rounded hover:bg-[#fcebeb] hover:text-[#a32d2d] text-[12px]">🗑</button>}
       </div>}
       {!compact && picker===m.id && <div className="absolute top-6 right-2 z-20 bg-page border border-line rounded-lg nshadow px-1.5 py-1 flex gap-0.5">
         {REACT_EMOJIS.map(e=><button key={e} onClick={()=>toggleReact(m.id,e)} className="w-8 h-8 grid place-items-center rounded hover:bg-sidebar text-[16px]">{e}</button>)}
@@ -387,14 +431,23 @@ function Channels({store,setStore,cur}){
 
   return <div className="fadein flex h-full bg-page">
     <div className="flex-1 flex flex-col min-w-0">
-      <div className="px-6 py-3 border-b border-line flex items-center gap-2 shrink-0 relative">
-        <span className="text-nfaint">#</span><span className="font-semibold text-[15px]">{ch.name}</span>
-        {ch.locked && <Tag bg="#ffe2dd" fg="#5d1715">리더 공지</Tag>}
-        <div className="ml-auto flex items-center gap-1">
-          <button onClick={()=>setPane(pane==="pins"?null:"pins")} className={"text-[12px] px-2 py-1 rounded-md hover:bg-sidebar "+(pane==="pins"?"bg-sidebar text-ntext":"text-nsub")}>📌 {pins.length}</button>
-          <button onClick={()=>setPane(pane==="saved"?null:"saved")} className={"text-[12px] px-2 py-1 rounded-md hover:bg-sidebar "+(pane==="saved"?"bg-sidebar text-ntext":"text-nsub")}>🔖 {saved.length}</button>
+      <div className="border-b border-line shrink-0 relative">
+        <div className="px-6 pt-3 pb-2 flex items-center gap-2">
+          <span className="text-nfaint">#</span><span className="font-semibold text-[15px]">{ch.name}</span>
+          {ch.locked && <Tag bg="#ffe2dd" fg="#5d1715">리더 공지</Tag>}
+          <button onClick={toggleFav} title="즐겨찾기" className={"text-[16px] leading-none ml-0.5 "+(ch.fav?"text-[#dfab01]":"text-nfaint hover:text-[#dfab01]")}>{ch.fav?"★":"☆"}</button>
+          <div className="ml-auto flex items-center gap-1">
+            <button onClick={()=>{setShowMembers(v=>!v); setThread(null);}} className={"text-[12px] px-2 py-1 rounded-md hover:bg-sidebar "+(showMembers?"bg-sidebar text-ntext":"text-nsub")}>👥 {onlineMembers.length}</button>
+            <button onClick={()=>setPane(pane==="pins"?null:"pins")} className={"text-[12px] px-2 py-1 rounded-md hover:bg-sidebar "+(pane==="pins"?"bg-sidebar text-ntext":"text-nsub")}>📌 {pins.length}</button>
+            <button onClick={()=>setPane(pane==="saved"?null:"saved")} className={"text-[12px] px-2 py-1 rounded-md hover:bg-sidebar "+(pane==="saved"?"bg-sidebar text-ntext":"text-nsub")}>🔖 {saved.length}</button>
+          </div>
         </div>
-        {pane && <div className="absolute right-4 top-12 z-30 w-80 bg-page border border-line rounded-lg nshadow p-2 max-h-[60vh] overflow-y-auto scrollthin">
+        <div className="px-6 flex items-center gap-0.5">
+          {[["msg","메시지"],["file","파일"],["link","링크"]].map(([k,label])=>(
+            <button key={k} onClick={()=>setTab(k)} className={"text-[13px] px-2.5 py-1.5 border-b-2 -mb-px transition "+(tab===k?"border-ntext text-ntext font-medium":"border-transparent text-nsub hover:text-ntext")}>{label}</button>
+          ))}
+        </div>
+        {pane && <div className="absolute right-4 top-full mt-1 z-30 w-80 bg-page border border-line rounded-lg nshadow p-2 max-h-[60vh] overflow-y-auto scrollthin">
           <div className="text-[12px] font-semibold text-nsub px-1 pb-1">{pane==="pins"?"📌 고정된 메시지":"🔖 저장한 메시지"}</div>
           {(pane==="pins"?pins:saved).length===0 && <div className="text-[12px] text-nfaint px-1 py-2">없음</div>}
           {(pane==="pins"?pins:saved).map(m=>(
@@ -407,8 +460,10 @@ function Channels({store,setStore,cur}){
       </div>
 
       <div className="flex-1 overflow-y-auto scrollthin px-6 py-4">
-        {ch.messages.length===0 && <div className="text-sm text-nfaint mt-8 text-center">아직 메시지가 없습니다. 첫 메시지를 남겨보세요.</div>}
-        {ch.messages.map(m=><Msg key={m.id} m={m}/>)}
+        {(()=>{ const visible = tab==="link"?ch.messages.filter(m=>firstUrl(m.text)) : tab==="file"?ch.messages.filter(m=>m.file) : ch.messages;
+          return visible.length===0
+            ? <div className="text-sm text-nfaint mt-8 text-center">{tab==="link"?"링크가 포함된 메시지가 없습니다.":tab==="file"?"첨부된 파일이 없습니다.":"아직 메시지가 없습니다. 첫 메시지를 남겨보세요."}</div>
+            : visible.map(m=><Msg key={m.id} m={m}/>); })()}
         <div ref={endRef}/>
       </div>
 
@@ -416,15 +471,18 @@ function Channels({store,setStore,cur}){
         {mentionList.length>0 && <div className="absolute bottom-full left-6 mb-1 w-60 bg-page border border-line rounded-lg nshadow p-1 z-20">
           {mentionList.map(m=><button key={m.id} onClick={()=>pickMention(m.name)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar text-left"><Avatar id={m.id} size={20}/><span className="text-[13px]">{m.name}</span><span className="text-[11px] text-nfaint">{m.role}</span></button>)}
         </div>}
-        <div className="flex items-center gap-2 bg-page border border-[#dcdbd7] rounded-lg px-3 py-2.5">
-          <input value={text} onChange={e=>onInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&mentionList.length>0){e.preventDefault();pickMention(mentionList[0].name);}else if(e.key==="Enter"){send();}}}
-            placeholder={`#${ch.name} 에 메시지 보내기…  (@로 멘션)`} className="flex-1 bg-transparent outline-none text-sm" />
-          <button onClick={send} className="text-sm font-medium btn-dark px-3 py-1 rounded-md">보내기</button>
+        {file && <div className="mb-2 inline-flex items-center gap-2 bg-sidebar border border-line rounded-md px-2.5 py-1.5 text-[12px]"><span>📎</span><span className="truncate max-w-[220px] text-ntext">{file.name}</span><span className="text-nfaint">{Math.round((file.size||0)/1024)}KB</span><button onClick={()=>setFile(null)} className="text-nfaint hover:text-[#a32d2d]">✕</button></div>}
+        <div className="flex items-end gap-2 bg-page border border-[#dcdbd7] rounded-lg px-3 py-2">
+          <label title="파일 첨부" className="cursor-pointer text-nfaint hover:text-ntext shrink-0 self-center text-[17px] leading-none">📎<input type="file" className="hidden" onChange={pickFile}/></label>
+          <textarea ref={taRef} rows={1} value={text} onChange={e=>{onInput(e.target.value);e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,160)+"px";}}
+            onKeyDown={e=>{ if(e.key!=="Enter") return; if(mentionList.length>0){e.preventDefault();pickMention(mentionList[0].name);return;} if(e.altKey||e.ctrlKey){e.preventDefault();nlInsert(e,setText);return;} if(e.shiftKey) return; e.preventDefault(); send(); }}
+            placeholder={`#${ch.name} 에 메시지 보내기…  (@멘션 · Alt/Ctrl+Enter 줄바꿈)`} className="flex-1 bg-transparent outline-none text-sm resize-none leading-relaxed py-1 max-h-40" />
+          <button onClick={send} className="text-sm font-medium btn-dark px-3 py-1.5 rounded-md shrink-0">보내기</button>
         </div>
       </div>
     </div>
 
-    {threadMsg && <div className="w-[380px] shrink-0 border-l border-line flex flex-col bg-page">
+    {threadMsg && <div className="w-[680px] max-w-[55%] shrink-0 border-l border-line flex flex-col bg-page">
       <div className="px-4 py-3 border-b border-line flex items-center justify-between shrink-0">
         <span className="font-semibold text-[14px]">스레드</span>
         <button onClick={()=>setThread(null)} className="w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-nsub">✕</button>
@@ -433,11 +491,24 @@ function Channels({store,setStore,cur}){
         <Msg m={threadMsg} compact/>
         <div className="text-[11px] text-nfaint border-b border-line pb-1 mb-2 mt-3">{(threadMsg.replies||[]).length}개 답글</div>
         {(threadMsg.replies||[]).map(r=>(
-          <div key={r.id} className="flex gap-2.5 py-1.5">
+          <div key={r.id} className="group flex gap-2.5 py-1.5">
             <Avatar id={r.who} size={28}/>
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-1.5"><b className="text-[13px] font-semibold">{member(r.who).name}</b><span className="text-[10px] text-nfaint">{r.t.slice(5)}</span></div>
-              <MsgText text={r.text}/>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-1.5">
+                <b className="text-[13px] font-semibold">{member(r.who).name}</b>
+                <span className="text-[10px] text-nfaint">{r.t.slice(5)}</span>
+                {r.edited && <span className="text-[10px] text-nfaint">(수정됨)</span>}
+                {canManage(r) && rEdit!==r.id && <span className="ml-auto opacity-0 group-hover:opacity-100 flex gap-1.5 transition">
+                  <button onClick={()=>{setREdit(r.id);setReEtext(r.text);}} className="text-[11px] text-nfaint hover:text-ntext">수정</button>
+                  <button onClick={()=>delReply(threadMsg.id,r.id)} className="text-[11px] text-nfaint hover:text-[#a32d2d]">삭제</button>
+                </span>}
+              </div>
+              {rEdit===r.id
+                ? <div className="mt-1">
+                    <textarea autoFocus value={reEtext} onChange={e=>{setReEtext(e.target.value);e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,160)+"px";}} onKeyDown={e=>{ if(e.key==="Enter"&&!(e.altKey||e.ctrlKey||e.shiftKey)){e.preventDefault();saveReplyEdit(threadMsg.id);} else if(e.key==="Enter"&&(e.altKey||e.ctrlKey)){e.preventDefault();nlInsert(e,setReEtext);} else if(e.key==="Escape"){setREdit(null);} }} className="w-full bg-page border border-[#9b9a97] rounded-md px-2 py-1 text-[13px] outline-none resize-none"/>
+                    <div className="flex gap-2 mt-1"><button onClick={()=>saveReplyEdit(threadMsg.id)} className="text-[11px] btn-dark px-2 py-0.5 rounded">저장</button><button onClick={()=>setREdit(null)} className="text-[11px] text-nsub">취소</button></div>
+                  </div>
+                : <><MsgText text={r.text}/>{firstUrl(r.text) && <LinkPreview url={firstUrl(r.text)}/>}</>}
             </div>
           </div>
         ))}
@@ -446,10 +517,34 @@ function Channels({store,setStore,cur}){
         {rMentionList.length>0 && <div className="absolute bottom-full left-3 right-3 mb-1 bg-page border border-line rounded-lg nshadow p-1 z-20">
           {rMentionList.map(m=><button key={m.id} onClick={()=>pickRMention(m.name)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar text-left"><Avatar id={m.id} size={20}/><span className="text-[13px]">{m.name}</span><span className="text-[11px] text-nfaint">{m.role}</span></button>)}
         </div>}
-        <div className="flex items-center gap-2 bg-page border border-[#dcdbd7] rounded-lg px-3 py-2">
-          <input value={rtext} onChange={e=>onRInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&rMentionList.length>0){e.preventDefault();pickRMention(rMentionList[0].name);}else if(e.key==="Enter"){sendReply(threadMsg.id);}}} placeholder="답글 남기기… (@로 멘션)" className="flex-1 bg-transparent outline-none text-sm"/>
-          <button onClick={()=>sendReply(threadMsg.id)} className="text-sm font-medium btn-dark px-3 py-1 rounded-md">답글</button>
+        <div className="flex items-end gap-2 bg-page border border-[#dcdbd7] rounded-lg px-3 py-2">
+          <textarea ref={rtaRef} rows={1} value={rtext} onChange={e=>{onRInput(e.target.value);e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,140)+"px";}}
+            onKeyDown={e=>{ if(e.key!=="Enter") return; if(rMentionList.length>0){e.preventDefault();pickRMention(rMentionList[0].name);return;} if(e.altKey||e.ctrlKey){e.preventDefault();nlInsert(e,setRtext);return;} if(e.shiftKey) return; e.preventDefault(); sendReply(threadMsg.id); }}
+            placeholder="답글 남기기… (@멘션 · Alt/Ctrl+Enter 줄바꿈)" className="flex-1 bg-transparent outline-none text-sm resize-none leading-relaxed py-1 max-h-36"/>
+          <button onClick={()=>sendReply(threadMsg.id)} className="text-sm font-medium btn-dark px-3 py-1.5 rounded-md shrink-0">답글</button>
         </div>
+      </div>
+    </div>}
+
+    {showMembers && !thread && <div className="w-[280px] shrink-0 border-l border-line flex flex-col bg-page">
+      <div className="px-4 py-3 border-b border-line flex items-center justify-between shrink-0">
+        <span className="font-semibold text-[14px]">접속 인원 <span className="text-nfaint font-normal">{onlineMembers.length}</span></span>
+        <button onClick={()=>setShowMembers(false)} className="w-7 h-7 grid place-items-center rounded hover:bg-sidebar text-nsub">✕</button>
+      </div>
+      <div className="flex-1 overflow-y-auto scrollthin px-2 py-2">
+        <div className="px-2 py-1 text-[11px] font-semibold text-nfaint uppercase tracking-wide">온라인 — {onlineMembers.length}</div>
+        {onlineMembers.map(m=>(
+          <div key={m.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-sidebar">
+            <div className="relative shrink-0">
+              <Avatar id={m.id} size={30}/>
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#3ba55d] border-2 border-page"></span>
+            </div>
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium truncate flex items-center gap-1">{m.name}{m.id===ME.id && <span className="text-[10px] text-nfaint">(나)</span>}</div>
+              {m.grade && <div className="text-[11px] text-nfaint truncate">{m.grade}</div>}
+            </div>
+          </div>
+        ))}
       </div>
     </div>}
   </div>;
@@ -869,8 +964,20 @@ function App(){
   const [exp,setExp]=useState({dashboard:true,channels:true,projects:true,meetings:false,knowledge:false,members:false});
   const [mFocus,setMFocus]=useState(null);
   const [kFocus,setKFocus]=useState(null);
+  const [notifOpen,setNotifOpen]=useState(false);
   const nonce=useRef(0);
   useEffect(()=>saveStore(store),[store]);
+
+  const notifs = useMemo(()=>{
+    const out=[]; const tag="@"+(ME?ME.name:"");
+    store.channels.forEach(c=>{
+      (c.messages||[]).forEach(m=>{
+        if(m.who!==ME.id && m.text && m.text.includes(tag)) out.push({id:c.id+"-"+m.id, ch:c, who:m.who, t:m.t, text:m.text, kind:"멘션"});
+        (m.replies||[]).forEach(r=>{ if(r.who!==ME.id && r.text && r.text.includes(tag)) out.push({id:c.id+"-"+m.id+"-"+r.id, ch:c, who:r.who, t:r.t, text:r.text, kind:"스레드 멘션"}); });
+      });
+    });
+    return out.sort((a,b)=>(b.t||"").localeCompare(a.t||""));
+  },[store.channels, authId]);
   function login(id){ try{ localStorage.setItem(AUTH_KEY,id); }catch(e){} setAuthId(id); }
   function logout(){ try{ localStorage.removeItem(AUTH_KEY); }catch(e){} setAuthId(null); }
   function reset(){ if(confirm("데모 데이터를 초기 상태로 되돌릴까요?")){localStorage.removeItem(STORE_KEY);setStore(structuredClone(SEED));setCur(SEED.channels[0].id);setProj(null);} }
@@ -914,6 +1021,10 @@ function App(){
 
         <SecRow icon="#" label="채널" open={exp.channels} active={view==="channels"} onToggle={()=>toggle("channels")} onNav={()=>goSec("channels")}/>
         {exp.channels && <div className="space-y-0.5">
+          {store.channels.filter(c=>c.fav).length>0 && <div>
+            <div className="text-[10px] uppercase tracking-wider text-nfaint pl-[34px] pt-1.5 pb-0.5">★ 즐겨찾기</div>
+            {store.channels.filter(c=>c.fav).map(c=><ChildRow key={"fav"+c.id} icon={<span className="text-[#dfab01]">★</span>} label={c.name} locked={c.locked} active={view==="channels"&&cur===c.id} onClick={()=>openChannel(c.id)}/>)}
+          </div>}
           {Object.entries(chGroups).map(([g,list])=>(
             <div key={g}>
               <div className="text-[10px] uppercase tracking-wider text-nfaint pl-[34px] pt-1.5 pb-0.5">{g}</div>
@@ -967,6 +1078,31 @@ function App(){
             <span className="text-nfaint text-sm">🔍</span>
             <input placeholder="검색 (프로젝트·채널·문서)" className="bg-transparent outline-none text-sm w-full text-ntext"/>
           </div>
+        </div>
+        <div className="relative">
+          <button onClick={()=>setNotifOpen(o=>!o)} title="알림" className="relative w-9 h-9 grid place-items-center rounded-md hover:bg-sidebar text-[17px]">🔔
+            {notifs.length>0 && <span className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 grid place-items-center text-[10px] font-bold text-white bg-[#e03e3e] rounded-full leading-none">{notifs.length>9?"9+":notifs.length}</span>}
+          </button>
+          {notifOpen && <div className="absolute right-0 top-full mt-1 w-[320px] bg-page border border-line rounded-lg nshadow z-40 overflow-hidden">
+            <div className="px-3 py-2.5 border-b border-line flex items-center justify-between">
+              <span className="font-semibold text-[13px]">알림 {notifs.length>0 && <span className="text-nfaint font-normal">{notifs.length}</span>}</span>
+              <button onClick={()=>setNotifOpen(false)} className="text-nfaint hover:text-ntext text-sm">✕</button>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto scrollthin">
+              {notifs.length===0
+                ? <div className="px-3 py-6 text-center text-[12px] text-nfaint">새 알림이 없습니다.<br/>나를 @멘션하면 여기에 표시됩니다.</div>
+                : notifs.map(n=>(
+                  <button key={n.id} onClick={()=>{openChannel(n.ch.id);setNotifOpen(false);}} className="w-full text-left px-3 py-2.5 border-b border-line hover:bg-sidebar flex gap-2.5">
+                    <Avatar id={n.who} size={28}/>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[12px]"><b className="font-semibold">{member(n.who).name}</b> <span className="text-nfaint">님이 #{n.ch.name}에서 {n.kind}</span></div>
+                      <div className="text-[12px] text-nsub truncate mt-0.5">{n.text}</div>
+                      <div className="text-[10px] text-nfaint mt-0.5">{(n.t||"").slice(5)}</div>
+                    </div>
+                  </button>
+                ))}
+            </div>
+          </div>}
         </div>
         <Tag bg="#dbeddb" fg="#1c3829" dot="#0f9960">온라인 {MEMBERS.length}</Tag>
       </header>
