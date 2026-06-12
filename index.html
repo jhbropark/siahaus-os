@@ -41,6 +41,8 @@
   .btn-dark:hover{background:#2b2a26}
   .inp{width:100%;background:#fff;border:1px solid #dcdbd7;border-radius:6px;padding:.5rem .6rem;font-size:.85rem;outline:none;color:#37352f}
   .inp:focus{border-color:#9b9a97;box-shadow:0 0 0 1px #9b9a97}
+  .tri{transition:transform .15s ease}
+  .tri-open{transform:rotate(90deg)}
 </style>
 </head>
 <body>
@@ -162,6 +164,33 @@ function Section({title,desc,right,children}){
   </div>;
 }
 
+/* ===== Notion-style 토글 삼각형 ===== */
+function Tri({open}){
+  return <svg width="9" height="9" viewBox="0 0 100 100" className={"tri text-nfaint"+(open?" tri-open":"")} style={{display:"block"}}>
+    <path d="M34 22 L74 50 L34 78 Z" fill="currentColor"/>
+  </svg>;
+}
+/* 사이드바 상위(섹션) 행 */
+function SecRow({icon,label,open,active,onToggle,onNav}){
+  return <div className={"group flex items-center gap-0.5 pl-1 pr-2 py-1.5 rounded-md transition "+(active?"bg-[rgba(55,53,47,.08)] text-ntext font-medium":"text-nsub hov")}>
+    <button onClick={onToggle} className="w-5 h-5 grid place-items-center rounded hover:bg-[rgba(55,53,47,.14)] shrink-0" aria-label="toggle">
+      <Tri open={open}/>
+    </button>
+    <button onClick={onNav} className="flex items-center gap-2 flex-1 min-w-0 text-left py-0.5">
+      <span className="w-4 text-center text-nfaint shrink-0 text-[13px]">{icon}</span>
+      <span className="truncate text-[14px]">{label}</span>
+    </button>
+  </div>;
+}
+/* 사이드바 하위(페이지) 행 */
+function ChildRow({icon,label,active,locked,onClick}){
+  return <button onClick={onClick} className={"w-full flex items-center gap-1.5 pl-[34px] pr-2 py-1.5 rounded-md text-[13.5px] text-left transition "+(active?"bg-[rgba(55,53,47,.08)] text-ntext font-medium":"text-nsub hov")}>
+    {icon!==undefined && <span className="shrink-0 grid place-items-center w-3 text-nfaint">{icon}</span>}
+    <span className="truncate">{label}</span>
+    {locked && <span className="ml-auto text-[10px]">🔒</span>}
+  </button>;
+}
+
 function Dashboard({store, go}){
   const active = store.projects.filter(p=>!["Delivered","Archived"].includes(p.status));
   const dueSoon = store.projects.filter(p=>{
@@ -186,7 +215,7 @@ function Dashboard({store, go}){
       ))}
     </div>
     <div className="grid lg:grid-cols-3 gap-4">
-      <div className="ncard nshadow p-4 lg:col-span-2">
+      <div className="ncard nshadow p-4 lg:col-span-2" id="dash-projects">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-[15px]">진행 중 프로젝트</h3>
           <button onClick={()=>go("projects")} className="text-[13px] text-nsub hover:text-ntext">보드 열기 →</button>
@@ -205,7 +234,7 @@ function Dashboard({store, go}){
           ))}
         </div>
       </div>
-      <div className="ncard nshadow p-4">
+      <div className="ncard nshadow p-4" id="dash-activity">
         <h3 className="font-semibold text-[15px] mb-3">최근 활동</h3>
         <div className="space-y-3">
           {store.activity.map(a=>(
@@ -220,7 +249,7 @@ function Dashboard({store, go}){
         </div>
       </div>
     </div>
-    <div className="ncard nshadow p-4 mt-4">
+    <div className="ncard nshadow p-4 mt-4" id="dash-due">
       <h3 className="font-semibold text-[15px] mb-3">다가오는 마감</h3>
       <div className="flex gap-3 overflow-x-auto scrollthin pb-1">
         {dueSoon.length===0 && <div className="text-sm text-nfaint">임박한 마감이 없습니다.</div>}
@@ -237,8 +266,8 @@ function Dashboard({store, go}){
   </Section>;
 }
 
-/* CHANNELS — 메시지 영역만 (채널 목록은 사이드바에) */
-function Channels({store,setStore,cur,setCur}){
+/* CHANNELS — 메시지 영역만 */
+function Channels({store,setStore,cur}){
   const [text,setText]=useState("");
   const endRef=useRef(null);
   const ch = store.channels.find(c=>c.id===cur) || store.channels[0];
@@ -284,9 +313,10 @@ function Channels({store,setStore,cur,setCur}){
   </div>;
 }
 
-function Projects({store,setStore}){
+function Projects({store,setStore,focus}){
   const [sel,setSel]=useState(null);
   const [adding,setAdding]=useState(false);
+  useEffect(()=>{ if(focus && focus.id) setSel(focus.id); },[focus && focus.n]);
   function move(pid,dir){
     setStore(s=>{const ns=structuredClone(s);const p=ns.projects.find(x=>x.id===pid);
       let i=STATUSES.indexOf(p.status); i=Math.max(0,Math.min(STATUSES.length-1,i+dir)); p.status=STATUSES[i];return ns;});
@@ -389,8 +419,9 @@ function AddProject({onClose,onAdd}){
 }
 function Field({label,children}){return <div><div className="text-[12px] text-nsub mb-1">{label}</div>{children}</div>;}
 
-function Meetings({store}){
+function Meetings({store,focus}){
   const [sel,setSel]=useState(store.meetings[0]?.id);
+  useEffect(()=>{ if(focus && focus.id) setSel(focus.id); },[focus && focus.n]);
   const m = store.meetings.find(x=>x.id===sel);
   return <Section title="회의록" desc="모든 회의의 결정과 액션을 기록">
     <div className="grid lg:grid-cols-3 gap-4">
@@ -431,9 +462,10 @@ function Meetings({store}){
   </Section>;
 }
 
-function Knowledge({store}){
+function Knowledge({store,focus}){
   const [sel,setSel]=useState(null);
   const [copied,setCopied]=useState(false);
+  useEffect(()=>{ if(focus && focus.id){ setSel(focus.id); setCopied(false); } },[focus && focus.n]);
   const t = sel && store.templates.find(x=>x.id===sel);
   return <Section title="지식 · 템플릿" desc="재사용 가능한 표준 문서 — 복사해서 바로 사용">
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -500,8 +532,12 @@ function App(){
   const [store,setStore]=useState(loadStore);
   const [view,setView]=useState("dashboard");
   const [menu,setMenu]=useState(false);
-  const [chOpen,setChOpen]=useState(true);
   const [cur,setCur]=useState(store.channels[0].id);
+  const [exp,setExp]=useState({dashboard:true,channels:true,projects:true,meetings:false,knowledge:false,members:false});
+  const [pFocus,setPFocus]=useState(null);
+  const [mFocus,setMFocus]=useState(null);
+  const [kFocus,setKFocus]=useState(null);
+  const nonce=useRef(0);
   useEffect(()=>saveStore(store),[store]);
   function reset(){ if(confirm("데모 데이터를 초기 상태로 되돌릴까요?")){localStorage.removeItem(STORE_KEY);setStore(structuredClone(SEED));setCur(SEED.channels[0].id);} }
 
@@ -509,16 +545,20 @@ function App(){
     const g={}; store.channels.forEach(c=>{(g[c.group]=g[c.group]||[]).push(c)}); return g;
   },[store.channels]);
 
-  const Body={dashboard:<Dashboard store={store} go={setView}/>,channels:<Channels store={store} setStore={setStore} cur={cur} setCur={setCur}/>,
-    projects:<Projects store={store} setStore={setStore}/>,meetings:<Meetings store={store}/>,
-    knowledge:<Knowledge store={store}/>,members:<Members/>}[view];
+  const toggle=id=>setExp(e=>({...e,[id]:!e[id]}));
+  const goSec=id=>{ setView(id); setExp(e=>({...e,[id]:true})); setMenu(false); };
+  function focusItem(section,id){
+    nonce.current++; const f={id,n:nonce.current};
+    if(section==="projects"){ setPFocus(f); setView("projects"); }
+    if(section==="meetings"){ setMFocus(f); setView("meetings"); }
+    if(section==="knowledge"){ setKFocus(f); setView("knowledge"); }
+    setExp(e=>({...e,[section]:true})); setMenu(false);
+  }
+  function openChannel(id){ setCur(id); setView("channels"); setExp(e=>({...e,channels:true})); setMenu(false); }
 
-  const navItem=(id,label,icon)=>(
-    <button onClick={()=>{setView(id);setMenu(false);}}
-      className={"w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[14px] transition "+(view===id?"bg-[rgba(55,53,47,.08)] text-ntext font-medium":"text-nsub hov")}>
-      <span className="w-4 text-center text-nfaint">{icon}</span>{label}
-    </button>
-  );
+  const Body={dashboard:<Dashboard store={store} go={goSec}/>,channels:<Channels store={store} setStore={setStore} cur={cur}/>,
+    projects:<Projects store={store} setStore={setStore} focus={pFocus}/>,meetings:<Meetings store={store} focus={mFocus}/>,
+    knowledge:<Knowledge store={store} focus={kFocus}/>,members:<Members/>}[view];
 
   const Side=(
     <aside className="w-60 shrink-0 border-r border-line bg-sidebar flex flex-col">
@@ -526,39 +566,51 @@ function App(){
         <div className="w-7 h-7 rounded-md grid place-items-center font-bold text-white text-sm" style={{background:"#37352f"}}>S</div>
         <div><div className="font-semibold text-[15px] leading-none text-ntext">sia.haus</div><div className="text-[11px] text-nfaint mt-1">Communication OS</div></div>
       </div>
-      <nav className="px-2 space-y-0.5 flex-1 overflow-y-auto scrollthin">
-        {navItem("dashboard","대시보드","⌂")}
+      <nav className="px-2 pb-3 space-y-0.5 flex-1 overflow-y-auto scrollthin">
 
-        {/* 채널 (접기/펼치기) */}
-        <div>
-          <div className={"w-full flex items-center gap-1 pl-1 pr-2 py-1.5 rounded-md text-[14px] transition "+(view==="channels"?"bg-[rgba(55,53,47,.08)] text-ntext font-medium":"text-nsub hov")}>
-            <button onClick={()=>setChOpen(o=>!o)} className="w-5 h-5 grid place-items-center rounded hover:bg-[rgba(55,53,47,.08)] text-nfaint shrink-0">
-              <span className="text-[10px]" style={{transform:chOpen?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span>
-            </button>
-            <button onClick={()=>{setView("channels");setChOpen(true);setMenu(false);}} className="flex items-center gap-2 flex-1 text-left">
-              <span className="w-4 text-center text-nfaint">#</span>채널
-            </button>
-          </div>
-          {chOpen && <div className="mt-0.5 space-y-0.5">
-            {Object.entries(chGroups).map(([g,list])=>(
-              <div key={g} className="pl-3">
-                <div className="text-[10px] uppercase tracking-wider text-nfaint px-2 pt-1.5 pb-0.5">{g}</div>
-                {list.map(c=>(
-                  <button key={c.id} onClick={()=>{setCur(c.id);setView("channels");setMenu(false);}}
-                    className={"w-full flex items-center gap-1.5 pl-2.5 pr-2 py-1.5 rounded-md text-[13.5px] text-left transition "+(view==="channels"&&cur===c.id?"bg-[rgba(55,53,47,.08)] text-ntext font-medium":"text-nsub hov")}>
-                    <span className="text-nfaint">#</span><span className="truncate">{c.name}</span>
-                    {c.locked && <span className="ml-auto text-[10px]">🔒</span>}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>}
-        </div>
+        {/* 대시보드 */}
+        <SecRow icon="⌂" label="대시보드" open={exp.dashboard} active={view==="dashboard"} onToggle={()=>toggle("dashboard")} onNav={()=>goSec("dashboard")}/>
+        {exp.dashboard && <div className="space-y-0.5">
+          <ChildRow label="진행 현황" icon="•" onClick={()=>{setView("dashboard");setMenu(false);setTimeout(()=>{const e=document.getElementById("dash-projects");e&&e.scrollIntoView({behavior:"smooth",block:"center"});},60);}}/>
+          <ChildRow label="다가오는 마감" icon="•" onClick={()=>{setView("dashboard");setMenu(false);setTimeout(()=>{const e=document.getElementById("dash-due");e&&e.scrollIntoView({behavior:"smooth",block:"center"});},60);}}/>
+          <ChildRow label="최근 활동" icon="•" onClick={()=>{setView("dashboard");setMenu(false);setTimeout(()=>{const e=document.getElementById("dash-activity");e&&e.scrollIntoView({behavior:"smooth",block:"center"});},60);}}/>
+        </div>}
 
-        {navItem("projects","프로젝트","▦")}
-        {navItem("meetings","회의록","✎")}
-        {navItem("knowledge","지식·템플릿","📄")}
-        {navItem("members","멤버","◍")}
+        {/* 채널 */}
+        <SecRow icon="#" label="채널" open={exp.channels} active={view==="channels"} onToggle={()=>toggle("channels")} onNav={()=>goSec("channels")}/>
+        {exp.channels && <div className="space-y-0.5">
+          {Object.entries(chGroups).map(([g,list])=>(
+            <div key={g}>
+              <div className="text-[10px] uppercase tracking-wider text-nfaint pl-[34px] pt-1.5 pb-0.5">{g}</div>
+              {list.map(c=><ChildRow key={c.id} icon={<span className="text-nfaint">#</span>} label={c.name} locked={c.locked} active={view==="channels"&&cur===c.id} onClick={()=>openChannel(c.id)}/>)}
+            </div>
+          ))}
+        </div>}
+
+        {/* 프로젝트 */}
+        <SecRow icon="▦" label="프로젝트" open={exp.projects} active={view==="projects"} onToggle={()=>toggle("projects")} onNav={()=>goSec("projects")}/>
+        {exp.projects && <div className="space-y-0.5">
+          {store.projects.map(p=><ChildRow key={p.id} icon={<span className="w-1.5 h-1.5 rounded-full inline-block" style={{background:STATUS_META[p.status].dot}}/>} label={p.name} onClick={()=>focusItem("projects",p.id)}/>)}
+        </div>}
+
+        {/* 회의록 */}
+        <SecRow icon="✎" label="회의록" open={exp.meetings} active={view==="meetings"} onToggle={()=>toggle("meetings")} onNav={()=>goSec("meetings")}/>
+        {exp.meetings && <div className="space-y-0.5">
+          {store.meetings.map(m=><ChildRow key={m.id} icon="•" label={m.title} onClick={()=>focusItem("meetings",m.id)}/>)}
+        </div>}
+
+        {/* 지식·템플릿 */}
+        <SecRow icon="📄" label="지식·템플릿" open={exp.knowledge} active={view==="knowledge"} onToggle={()=>toggle("knowledge")} onNav={()=>goSec("knowledge")}/>
+        {exp.knowledge && <div className="space-y-0.5">
+          {store.templates.map(t=><ChildRow key={t.id} icon="•" label={t.name} onClick={()=>focusItem("knowledge",t.id)}/>)}
+        </div>}
+
+        {/* 멤버 */}
+        <SecRow icon="◍" label="멤버" open={exp.members} active={view==="members"} onToggle={()=>toggle("members")} onNav={()=>goSec("members")}/>
+        {exp.members && <div className="space-y-0.5">
+          {MEMBERS.map(m=><ChildRow key={m.id} icon={<span className="w-2 h-2 rounded-full inline-block" style={{background:m.color}}/>} label={m.name} onClick={()=>goSec("members")}/>)}
+        </div>}
+
       </nav>
       <div className="p-2 border-t border-line">
         <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hov">
